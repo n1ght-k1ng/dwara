@@ -14,6 +14,7 @@ export type DwaraErrorCode =
   | 'SSH_CONFIG_INVALID'
   // Refusals; the action never ran
   | 'DENIED_BY_POLICY'
+  | 'DESTRUCTIVE_DENIED'
   | 'APPROVAL_REQUIRED'
   | 'SESSION_LIMIT'
   | 'HOST_LIMIT'
