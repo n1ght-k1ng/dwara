@@ -261,3 +261,48 @@ MCP tool names are prefixed by risk (`read_*`, `reversible_*`, `config_*`) so cl
 ## 20. Decisions
 
 Record decisions here as `YYYY-MM-DD — decision — reason`.
+
+2026-09-22 — **Policy merge is specificity-wins per risk class.** A risk class named anywhere in the winning
+host rule takes its decision from that rule; `defaults` only fills classes no winning rule mentions.
+Precedence (`deny > require_approval > allow`) applies only *within* one level. Reason: read literally,
+section 6's steps 3 and 4 contradict each other, and the union reading makes this file's own `staging-*`
+example a no-op — `allow: [read, reversible]` would lose to the inherited `require_approval: [reversible]`.
+
+2026-09-22 — **Equally specific host rules merge strictest-first.** When two patterns tie on specificity
+(`lab-*` and `*-api` for `lab-api`), every tied rule is considered and the most restrictive verdict per risk
+class wins. Reason: order-independence. Under first-match-wins, reordering the policy file or inserting a
+rule above another could quietly loosen it, and a policy file is reviewed as a diff.
+
+2026-09-22 — **Host pattern specificity = exact beats wildcard, then literal character count.** Reason: it is
+predictable from reading the file and needs no tie-breaking heuristics; genuine ties go to the rule above.
+
+2026-09-22 — **`destructive` is denied in code, not in policy.** The evaluator refuses the class before
+consulting host rules or overrides. Reason: `CLAUDE.md` rule 8 denies the class in the MVP, and a guarantee
+that a policy file could lift is not a guarantee — including when that file is edited by a compromised agent
+or an unreviewed PR.
+
+2026-09-22 — **A risk class no rule mentions is denied.** Reason: fail closed. Silence in a security policy
+is not permission.
+
+2026-09-22 — **A policy refusal is reported ahead of an exhausted session budget.** Reason: the agent needs
+to learn that an action is not permitted at all, rather than concluding it merely ran out of turns and
+should retry in a new session.
+
+2026-09-22 — **Argv escaping is POSIX single-quoting, not `shell-quote`'s `quote()`.** Reason: `quote()`
+targets an interactive bash and emits `\!` inside double quotes to defeat history expansion. A
+non-interactive shell — which is what `ssh host cmd` runs — does not treat that as an escape, so any argument
+containing `!` arrives with a literal backslash. Reproduced on `/bin/sh` and `/bin/bash`; found by the
+property test. `shell-quote` remains the right tool for *parsing* commands in the PreToolUse hook (§15).
+
+2026-09-22 — **Arguments containing NUL, C0 controls or DEL are rejected, not escaped.** Reason: they are
+invisible in the logs, diffs and audit entries a human reads afterwards to work out what ran, and nothing
+legitimate needs them — content with newlines goes over stdin.
+
+2026-09-22 — **The transport enforces its own timeout rather than using execa's.** Reason: execa kills the
+client and then waits for its stdio to close, but the persistent ControlMaster holds those descriptors open
+until the remote command ends, so a 2s deadline took the full 30s of a `sleep 30`. The timeout bounds how
+long Dwara waits, not how long the remote process runs; that is inherent to connection multiplexing.
+
+2026-09-22 — **`doctor` probes with the argv the tools actually use.** Reason: a correctly scoped sudoers
+grants verbs (`systemctl restart *`) and refuses the bare command, so a `<command> --version` probe fails on
+well-configured hosts and passes on ones that hand out blanket root.

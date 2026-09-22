@@ -4,8 +4,8 @@ Handoff notes between Claude Code sessions. Update after every task.
 
 ## Current phase
 
-Phase 0 — repo bootstrap and testbed. **Complete.** Exit criteria verified on
-2026-09-22 (see "Phase 0 exit criteria" below).
+Phase 1 — core: types, policy engine, SSH transport, doctor. **Complete.**
+Phase 0 complete before it. Exit criteria for both verified on 2026-09-22.
 
 ## Done
 
@@ -48,7 +48,38 @@ Phase 0 — repo bootstrap and testbed. **Complete.** Exit criteria verified on
       `pnpm testbed:reset`.
 - [x] 14/14 integration smoke tests pass against the running lab.
 
-## Things worth knowing before Phase 1
+**Phase 1: core**
+- `types.ts` and `errors.ts`: the shapes from DESIGN section 5 and a closed set of
+  `DwaraError` codes.
+- Policy: zod schema (strict), loader with a SHA-256 hash of the raw bytes, host glob
+  matching with specificity, and the evaluator. **100% statements/branches/functions/lines
+  on `packages/core/src/policy/**`**, enforced by a coverage threshold in CI.
+- SSH: argv escaping, an ssh_config parser (Include, globs, negation), and the transport
+  over the system `ssh` binary.
+- `dwara doctor`, plus `testbed/policy.yaml` as a committed example policy.
+- 158 unit tests, 28 integration tests against the lab.
+
+## Phase 1 exit criteria
+
+- [x] 100% branch coverage on the policy evaluator. `pnpm test:coverage` enforces it.
+- [x] Escaping property tests pass at 10,000+ generated inputs, verified against a real
+      shell rather than against shell-quote's own parser.
+- [x] `dwara doctor -F testbed/ssh_config --policy testbed/policy.yaml` reports all five
+      hosts healthy, and flags a host whose sudoers file has been removed with the exact
+      line to restore.
+
+## Two bugs the tests found, worth remembering
+
+- **shell-quote corrupts `!`.** Its `quote()` emits `\!` inside double quotes for
+  interactive bash; a non-interactive shell passes the backslash through literally. Any
+  grep pattern or path containing `!` would have been silently altered. Dwara now does its
+  own POSIX single-quoting; shell-quote stays for the hook's *parsing* in Phase 4.
+- **Timeouts did not time out.** execa kills the ssh client then waits for its stdio to
+  close, and the ControlMaster holds those descriptors until the remote command ends — a
+  2s deadline took 30s. The transport now runs its own timer. Pinned by an assertion on
+  elapsed time, not just on the error code.
+
+## Things worth knowing
 
 - **Docker-in-Docker** needs `/var/lib/docker` *and* `/var/lib/containerd` on volumes;
   without the second, overlay mounts inside a lab host fail with `EINVAL`.
@@ -63,15 +94,21 @@ Phase 0 — repo bootstrap and testbed. **Complete.** Exit criteria verified on
 
 ## Next
 
-Phase 1 — core: types, policy engine, SSH transport, `dwara doctor`.
-Kickoff prompt is in `docs/PLAN.md`. Write the policy test table and the escaping
-property tests before any implementation, and add no tool definitions in that phase.
+Phase 2 — read-only tools, redactor, audit log, MCP server. Kickoff prompt is in
+`docs/PLAN.md`. Build the redactor corpus before the redactor, and capture real command
+output from the testbed as parser fixtures rather than inventing them.
+
+The registry and execution pipeline sit on top of what Phase 1 built: `evaluate()` for the
+decision, `SshTransport` for execution, `DwaraError` for failures. Nothing in Phase 2
+should need to touch escaping or policy semantics again.
 
 ## Open questions
 
 - Final project name and npm scope. Packages are `@dwara/*` and private for now.
 - Model budget for the Phase 5 benchmark runs.
 - Whether integration tests should run in CI with the testbed, or stay local until
-  Phase 5. Phase 0 CI runs unit tests only.
+  Phase 5. CI runs unit tests only so far.
+- Session accounting: `evaluate()` reads `actionsUsed` and never changes it, so something
+  in Phase 2 has to own the counter and increment it only on executed actions.
 
 ## Dogfooding log (Phase 7)
