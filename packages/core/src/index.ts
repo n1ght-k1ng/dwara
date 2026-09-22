@@ -1,10 +1,20 @@
-/**
- * Package identifier, used by the CLI's `doctor` output and by the audit log
- * so every entry records which build produced it.
- *
- * This package is a Phase 0 stub; its implementation lands in a later phase
- * (see `docs/PLAN.md`).
- */
+export { DwaraError } from './errors.js';
+export type { DwaraErrorCode, DwaraErrorDetails } from './errors.js';
+
+export { Risk, RISK_ORDER } from './types.js';
+export type {
+  Ctx,
+  Decision,
+  RawResult,
+  RemoteCommand,
+  SnapshotRef,
+  SnapshotSpec,
+  ToolDef,
+  ToolResult,
+  VerifyResult,
+} from './types.js';
+
+/** Package identifier, recorded in audit entries so each one names its build. */
 export const PACKAGE_NAME = '@dwara/core' as const;
 
 /** Version of the Dwara toolchain this build belongs to. */
