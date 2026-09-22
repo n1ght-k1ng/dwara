@@ -69,6 +69,14 @@ lab_ssh() {
   ssh -F "$SSH_CONFIG" "$host" "$@"
 }
 
+# Break scenarios act on a lab host as root, the way a real outage does. They are
+# deliberately not confined to the agent's sudo allowlist: the point of a
+# scenario is to produce a broken host, not to model how it got broken.
+lab_root() {
+  local host="$1"; shift
+  docker exec "$host" "$@"
+}
+
 # Retry a command until it succeeds or the deadline passes.
 wait_for() {
   local desc="$1" timeout="$2"; shift 2

@@ -28,6 +28,13 @@ services:
     image: dwara-lab-api:dev
     container_name: lab-api
     hostname: lab-api
+    # A small, bounded /var/log: the log-explosion scenario has to be able to
+    # actually fill a filesystem, and must not eat the developer's disk to do it.
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+      - /var/log:size=128m,mode=0755
     ports:
       - "127.0.0.1:2201:22"
       - "127.0.0.1:8443:443"

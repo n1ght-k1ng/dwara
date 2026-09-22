@@ -24,6 +24,10 @@ RUN rm -f /etc/nginx/sites-enabled/default \
  && nginx -t \
  && systemctl enable nginx.service
 
+# /var/log is a tmpfs on lab-api, so the directories services expect there have
+# to be recreated at every boot.
+COPY images/api/tmpfiles-dwara-lab.conf /etc/tmpfiles.d/dwara-lab.conf
+
 COPY images/api/app.env /etc/dwara-lab/app.env
 COPY images/api/dwara-app.service /etc/systemd/system/dwara-app.service
 RUN systemctl enable dwara-app.service
