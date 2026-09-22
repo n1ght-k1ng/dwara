@@ -1,0 +1,36 @@
+# Dwara testbed: five SSH-reachable "hosts" that mimic the shape of a backend
+# production stack. Each host is an Ubuntu 24.04 container running systemd as
+# PID 1, which is why they are privileged and get tmpfs on /run.
+#
+# No real company code, configuration, hostnames or credentials belong here.
+
+name: dwara-lab
+
+x-lab-host: &lab-host
+  privileged: true
+  tmpfs:
+    - /run
+    - /run/lock
+    - /tmp
+  stop_grace_period: 20s
+  networks: [labnet]
+
+x-base-build: &base-build
+  context: .
+  dockerfile: images/base/Dockerfile
+  args:
+    AUTHORIZED_KEY: ${DWARA_LAB_PUBKEY:?set by testbed/scripts/up.sh}
+
+services:
+  lab-cache:
+    <<: *lab-host
+    build: *base-build
+    image: dwara-lab-base:dev
+    container_name: lab-cache
+    hostname: lab-cache
+    ports:
+      - "127.0.0.1:2203:22"
+
+networks:
+  labnet:
+    name: dwara-labnet

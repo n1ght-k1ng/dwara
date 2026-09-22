@@ -1,0 +1,35 @@
+# SSH config for the Dwara testbed. Always used explicitly:
+#
+#     ssh -F testbed/ssh_config lab-api ...
+#
+# Paths are relative to the repo root, so run testbed commands from there.
+# These are throwaway container hosts on loopback; nothing here points at a real
+# machine, and Dwara itself must never be pointed at one during phases 0-6.
+
+Host lab-*
+  HostName 127.0.0.1
+  User dwara
+  IdentityFile testbed/.keys/dwara_lab
+  IdentitiesOnly yes
+  BatchMode yes
+  PasswordAuthentication no
+  StrictHostKeyChecking accept-new
+  UserKnownHostsFile testbed/.keys/known_hosts
+  LogLevel ERROR
+  ConnectTimeout 5
+  ServerAliveInterval 15
+
+Host lab-api
+  Port 2201
+
+Host lab-db
+  Port 2202
+
+Host lab-cache
+  Port 2203
+
+Host lab-queue
+  Port 2204
+
+Host lab-staging
+  Port 2205

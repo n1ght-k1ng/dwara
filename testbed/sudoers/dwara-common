@@ -1,0 +1,29 @@
+# Dwara lab: passwordless sudo for the dwara user, allowlisted commands only.
+# Installed to /etc/sudoers.d/dwara-common. Lab-only; see testbed/README.md.
+
+Cmnd_Alias DWARA_SYSTEMD = /usr/bin/systemctl status *,      \
+                           /usr/bin/systemctl show *,        \
+                           /usr/bin/systemctl cat *,         \
+                           /usr/bin/systemctl is-active *,   \
+                           /usr/bin/systemctl is-enabled *,  \
+                           /usr/bin/systemctl is-failed *,   \
+                           /usr/bin/systemctl is-system-running, \
+                           /usr/bin/systemctl list-units *,  \
+                           /usr/bin/systemctl list-unit-files *, \
+                           /usr/bin/systemctl daemon-reload, \
+                           /usr/bin/systemctl start *,       \
+                           /usr/bin/systemctl stop *,        \
+                           /usr/bin/systemctl restart *,     \
+                           /usr/bin/systemctl reload *
+
+Cmnd_Alias DWARA_LOGS    = /usr/bin/journalctl *
+
+Cmnd_Alias DWARA_INSPECT = /usr/bin/ss *,      \
+                           /usr/bin/du *,      \
+                           /usr/bin/df *,      \
+                           /usr/bin/find /var/log *, \
+                           /usr/bin/stat *,    \
+                           /usr/bin/sha256sum *
+
+dwara ALL=(root) NOPASSWD: DWARA_SYSTEMD, DWARA_LOGS, DWARA_INSPECT
+Defaults:dwara !requiretty
