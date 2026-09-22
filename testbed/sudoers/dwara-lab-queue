@@ -1,0 +1,2 @@
+# lab-queue extras: inspect the broker's on-disk logs.
+dwara ALL=(root) NOPASSWD: /usr/bin/du /var/lib/kafka*, /usr/bin/ls /var/lib/kafka*

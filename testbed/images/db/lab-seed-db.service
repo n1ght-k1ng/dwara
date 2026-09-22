@@ -1,0 +1,15 @@
+[Unit]
+Description=Seed the Dwara lab database
+After=postgresql@16-main.service
+Requires=postgresql@16-main.service
+ConditionPathExists=!/var/lib/postgresql/.dwara-seeded
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c 'until pg_isready -q; do sleep 1; done'
+ExecStart=/usr/bin/sudo -u postgres /usr/bin/psql -v ON_ERROR_STOP=1 -f /opt/dwara-lab/seed.sql
+ExecStart=/usr/bin/touch /var/lib/postgresql/.dwara-seeded
+
+[Install]
+WantedBy=multi-user.target

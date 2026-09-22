@@ -1,0 +1,7 @@
+# lab-api / lab-staging extras: nginx validation, reload, and config reads.
+Cmnd_Alias DWARA_NGINX = /usr/sbin/nginx -t,     \
+                         /usr/sbin/nginx -T,     \
+                         /usr/sbin/nginx -s reload, \
+                         /usr/bin/cat /etc/nginx/*
+
+dwara ALL=(root) NOPASSWD: DWARA_NGINX

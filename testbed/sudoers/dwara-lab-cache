@@ -1,0 +1,2 @@
+# lab-cache extras: read Redis configuration.
+dwara ALL=(root) NOPASSWD: /usr/bin/cat /etc/redis/*

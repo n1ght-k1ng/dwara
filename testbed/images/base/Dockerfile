@@ -12,6 +12,10 @@ ARG AUTHORIZED_KEY
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8
 
+# Package installs must not try to start services at build time: there is no
+# systemd running yet. `systemctl enable` still works (it only writes symlinks).
+RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d
+
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       systemd systemd-sysv dbus dbus-user-session \

@@ -1,0 +1,22 @@
+[Unit]
+Description=Dwara lab API (dummy NestJS app)
+After=docker.service
+Requires=docker.service
+
+[Service]
+# The image is loaded into this host's Docker engine by testbed/scripts/up.sh,
+# so the first boot restarts until it appears. Restart=always is also what makes
+# the api-crash-loop scenario behave like a real one.
+Restart=always
+RestartSec=2s
+StartLimitIntervalSec=0
+TimeoutStartSec=0
+ExecStartPre=-/usr/bin/docker rm -f lab-app
+ExecStart=/usr/bin/docker run --rm --name lab-app \
+    --env-file /etc/dwara-lab/app.env \
+    --network host \
+    dwara-lab-app:dev
+ExecStop=-/usr/bin/docker stop --time 5 lab-app
+
+[Install]
+WantedBy=multi-user.target

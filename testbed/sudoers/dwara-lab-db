@@ -1,0 +1,8 @@
+# lab-db extras: read PostgreSQL configuration and query cluster state.
+Cmnd_Alias DWARA_PG = /usr/bin/cat /etc/postgresql/16/main/*, \
+                      /usr/bin/pg_isready *,                  \
+                      /usr/bin/pg_lsclusters *,               \
+                      /usr/bin/pg_lsclusters
+
+dwara ALL=(root) NOPASSWD: DWARA_PG
+dwara ALL=(postgres) NOPASSWD: /usr/bin/psql *

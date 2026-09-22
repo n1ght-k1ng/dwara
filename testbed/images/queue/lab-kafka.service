@@ -1,0 +1,20 @@
+[Unit]
+Description=Dwara lab Kafka broker (KRaft, single node)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Restart=always
+RestartSec=3s
+StartLimitIntervalSec=0
+TimeoutStartSec=0
+ExecStartPre=-/usr/bin/docker rm -f lab-kafka
+ExecStart=/usr/bin/docker run --rm --name lab-kafka \
+    --env-file /etc/dwara-lab/kafka.env \
+    --network host \
+    -v /var/lib/kafka:/var/lib/kafka \
+    apache/kafka:3.9.0
+ExecStop=-/usr/bin/docker stop --time 10 lab-kafka
+
+[Install]
+WantedBy=multi-user.target

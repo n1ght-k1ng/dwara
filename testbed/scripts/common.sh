@@ -16,6 +16,13 @@ SSH_CONFIG="$TESTBED_DIR/ssh_config"
 COMPOSE_FILE="$TESTBED_DIR/compose.yaml"
 
 LAB_HOSTS=(lab-api lab-db lab-cache lab-queue lab-staging)
+declare -A LAB_PORTS=(
+  [lab-api]=2201
+  [lab-db]=2202
+  [lab-cache]=2203
+  [lab-queue]=2204
+  [lab-staging]=2205
+)
 
 if [ -t 1 ]; then
   C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_DIM=$'\033[2m'; C_OFF=$'\033[0m'
@@ -43,6 +50,18 @@ export_pubkey() {
   [ -f "$KEY_FILE.pub" ] || die "lab key missing; run testbed/scripts/gen-keys.sh"
   DWARA_LAB_PUBKEY="$(cat "$KEY_FILE.pub")"
   export DWARA_LAB_PUBKEY
+}
+
+# Lab hosts are disposable: rebuilding an image gives them new SSH host keys.
+# Dropping the stale entries keeps StrictHostKeyChecking meaningful for real
+# hosts instead of turning it off across the board.
+forget_host_keys() {
+  mkdir -p "$KEY_DIR"
+  touch "$KEY_DIR/known_hosts"
+  for host in "${LAB_HOSTS[@]}"; do
+    ssh-keygen -q -f "$KEY_DIR/known_hosts" -R "[127.0.0.1]:${LAB_PORTS[$host]}" >/dev/null 2>&1 || true
+  done
+  rm -f "$KEY_DIR/known_hosts.old"
 }
 
 lab_ssh() {

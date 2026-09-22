@@ -2,6 +2,9 @@
 # production stack. Each host is an Ubuntu 24.04 container running systemd as
 # PID 1, which is why they are privileged and get tmpfs on /run.
 #
+# Base images (dwara-lab-base, dwara-lab-docker) are built first by
+# testbed/scripts/up.sh, because the per-host images derive from them.
+#
 # No real company code, configuration, hostnames or credentials belong here.
 
 name: dwara-lab
@@ -13,24 +16,85 @@ x-lab-host: &lab-host
     - /run/lock
     - /tmp
   stop_grace_period: 20s
+  restart: unless-stopped
   networks: [labnet]
 
-x-base-build: &base-build
-  context: .
-  dockerfile: images/base/Dockerfile
-  args:
-    AUTHORIZED_KEY: ${DWARA_LAB_PUBKEY:?set by testbed/scripts/up.sh}
-
 services:
+  lab-api:
+    <<: *lab-host
+    build:
+      context: .
+      dockerfile: images/api/Dockerfile
+    image: dwara-lab-api:dev
+    container_name: lab-api
+    hostname: lab-api
+    ports:
+      - "127.0.0.1:2201:22"
+      - "127.0.0.1:8443:443"
+    volumes:
+      - lab-api-docker:/var/lib/docker
+      - lab-api-containerd:/var/lib/containerd
+
+  lab-db:
+    <<: *lab-host
+    build:
+      context: .
+      dockerfile: images/db/Dockerfile
+    image: dwara-lab-db:dev
+    container_name: lab-db
+    hostname: lab-db
+    ports:
+      - "127.0.0.1:2202:22"
+
   lab-cache:
     <<: *lab-host
-    build: *base-build
-    image: dwara-lab-base:dev
+    build:
+      context: .
+      dockerfile: images/cache/Dockerfile
+    image: dwara-lab-cache:dev
     container_name: lab-cache
     hostname: lab-cache
     ports:
       - "127.0.0.1:2203:22"
 
+  lab-queue:
+    <<: *lab-host
+    build:
+      context: .
+      dockerfile: images/queue/Dockerfile
+    image: dwara-lab-queue:dev
+    container_name: lab-queue
+    hostname: lab-queue
+    ports:
+      - "127.0.0.1:2204:22"
+    volumes:
+      - lab-queue-docker:/var/lib/docker
+      - lab-queue-containerd:/var/lib/containerd
+      - lab-queue-data:/var/lib/kafka
+
+  # Same image as lab-api, tagged staging so policy differences between
+  # production and staging have somewhere to show up.
+  lab-staging:
+    <<: *lab-host
+    image: dwara-lab-api:dev
+    container_name: lab-staging
+    hostname: lab-staging
+    ports:
+      - "127.0.0.1:2205:22"
+      - "127.0.0.1:8444:443"
+    volumes:
+      - lab-staging-docker:/var/lib/docker
+      - lab-staging-containerd:/var/lib/containerd
+
 networks:
   labnet:
     name: dwara-labnet
+
+volumes:
+  lab-api-docker:
+  lab-api-containerd:
+  lab-staging-docker:
+  lab-staging-containerd:
+  lab-queue-docker:
+  lab-queue-containerd:
+  lab-queue-data:
