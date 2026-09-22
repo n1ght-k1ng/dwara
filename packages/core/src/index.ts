@@ -27,3 +27,9 @@ export type { Policy, HostRule, ToolOverride } from './policy/schema.js';
 export { matchesHost, matchesAny, selectHostRules, specificity } from './policy/match.js';
 export { evaluate } from './policy/evaluate.js';
 export type { EvaluateInput } from './policy/evaluate.js';
+
+export { quoteArgv, assertSafeArg } from './ssh/escape.js';
+export { parseSshConfig, resolveHost } from './ssh/config.js';
+export type { SshConfig, SshHostBlock, ResolvedHost } from './ssh/config.js';
+export { SshTransport, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS } from './ssh/transport.js';
+export type { TransportOptions } from './ssh/transport.js';
