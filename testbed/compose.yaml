@@ -36,8 +36,8 @@ services:
       - /tmp
       - /var/log:size=128m,mode=0755
     ports:
-      - "127.0.0.1:2201:22"
-      - "127.0.0.1:8443:443"
+      - '127.0.0.1:2201:22'
+      - '127.0.0.1:8443:443'
     volumes:
       - lab-api-docker:/var/lib/docker
       - lab-api-containerd:/var/lib/containerd
@@ -51,7 +51,7 @@ services:
     container_name: lab-db
     hostname: lab-db
     ports:
-      - "127.0.0.1:2202:22"
+      - '127.0.0.1:2202:22'
 
   lab-cache:
     <<: *lab-host
@@ -62,7 +62,7 @@ services:
     container_name: lab-cache
     hostname: lab-cache
     ports:
-      - "127.0.0.1:2203:22"
+      - '127.0.0.1:2203:22'
 
   lab-queue:
     <<: *lab-host
@@ -73,7 +73,7 @@ services:
     container_name: lab-queue
     hostname: lab-queue
     ports:
-      - "127.0.0.1:2204:22"
+      - '127.0.0.1:2204:22'
     volumes:
       - lab-queue-docker:/var/lib/docker
       - lab-queue-containerd:/var/lib/containerd
@@ -87,8 +87,8 @@ services:
     container_name: lab-staging
     hostname: lab-staging
     ports:
-      - "127.0.0.1:2205:22"
-      - "127.0.0.1:8444:443"
+      - '127.0.0.1:2205:22'
+      - '127.0.0.1:8444:443'
     volumes:
       - lab-staging-docker:/var/lib/docker
       - lab-staging-containerd:/var/lib/containerd

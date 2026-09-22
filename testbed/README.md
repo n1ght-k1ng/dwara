@@ -1,6 +1,6 @@
 # Dwara testbed
 
-Five SSH-reachable "hosts" that mimic the *shape* of a backend production stack,
+Five SSH-reachable "hosts" that mimic the _shape_ of a backend production stack,
 so Dwara's tools, policy and benchmark have somewhere realistic to run.
 
 Each host is an Ubuntu 24.04 container running systemd as PID 1 with sshd, a
@@ -19,13 +19,13 @@ Each host is an Ubuntu 24.04 container running systemd as PID 1 with sshd, a
 
 ## Hosts
 
-| Host | SSH | Also exposed | Runs |
-|---|---|---|---|
-| `lab-api` | 2201 | 8443 → 443 | nginx (self-signed TLS) + Docker running the lab app |
-| `lab-db` | 2202 | — | PostgreSQL 16 (systemd), seeded `labdb` |
-| `lab-cache` | 2203 | — | Redis 7 (systemd), 64 MB maxmemory |
-| `lab-queue` | 2204 | — | Docker running single-node Kafka (KRaft) |
-| `lab-staging` | 2205 | 8444 → 443 | same image as `lab-api`, tagged staging |
+| Host          | SSH  | Also exposed | Runs                                                 |
+| ------------- | ---- | ------------ | ---------------------------------------------------- |
+| `lab-api`     | 2201 | 8443 → 443   | nginx (self-signed TLS) + Docker running the lab app |
+| `lab-db`      | 2202 | —            | PostgreSQL 16 (systemd), seeded `labdb`              |
+| `lab-cache`   | 2203 | —            | Redis 7 (systemd), 64 MB maxmemory                   |
+| `lab-queue`   | 2204 | —            | Docker running single-node Kafka (KRaft)             |
+| `lab-staging` | 2205 | 8444 → 443   | same image as `lab-api`, tagged staging              |
 
 All ports bind to `127.0.0.1` only.
 
@@ -51,13 +51,13 @@ curl -k https://127.0.0.1:8443/health
 the failure is actually live, which is what makes them usable as benchmark
 fixtures. Recovery is always `pnpm testbed:reset`.
 
-| Scenario | Host | Symptom |
-|---|---|---|
-| `api-crash-loop` | lab-api | app exits at boot on bad DB credentials; systemd restarts it forever; 502 |
-| `disk-full-logs` | lab-api | `/var/log` fills; services can no longer write logs |
-| `nginx-bad-config` | lab-api | upstream port is wrong; every request is a 502 while `nginx -t` still passes |
-| `redis-down` | lab-cache | redis stopped and masked; `/health` degraded on the redis check only |
-| `postgres-max-connections` | lab-db | `max_connections=5` with every slot held; postgres stays *active* but refuses connections |
+| Scenario                   | Host      | Symptom                                                                                                             |
+| -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------- |
+| `api-crash-loop`           | lab-api   | app exits at boot on bad DB credentials; systemd restarts it forever; 502                                           |
+| `disk-full-logs`           | lab-api   | `/var/log` fills; services can no longer write logs                                                                 |
+| `nginx-bad-config`         | lab-api   | upstream port is wrong; every request is a 502 while `nginx -t` still passes                                        |
+| `redis-down`               | lab-cache | redis stopped and masked; `/health` degraded on the redis check only                                                |
+| `postgres-max-connections` | lab-db    | every application connection slot held; postgres stays _active_ while lab-api 502s, and the journal names the cause |
 
 ## How it is put together
 

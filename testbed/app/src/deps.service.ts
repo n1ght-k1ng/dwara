@@ -10,7 +10,11 @@ export type CheckResult = { ok: boolean; detail: string; latencyMs: number };
 @Injectable()
 export class DepsService implements OnModuleDestroy {
   private readonly logger = new Logger(DepsService.name);
-  readonly pool = new Pool({ connectionString: config.databaseUrl, max: 5, connectionTimeoutMillis: 3000 });
+  readonly pool = new Pool({
+    connectionString: config.databaseUrl,
+    max: 5,
+    connectionTimeoutMillis: 3000,
+  });
   readonly redis = new Redis(config.redisUrl, { lazyConnect: true, maxRetriesPerRequest: 1 });
 
   private readonly kafka = new Kafka({
@@ -38,7 +42,9 @@ export class DepsService implements OnModuleDestroy {
 
   async checkPostgres(): Promise<CheckResult> {
     return timed(async () => {
-      const { rows } = await this.pool.query<{ count: string }>('SELECT count(*)::text AS count FROM orders');
+      const { rows } = await this.pool.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM orders',
+      );
       return `${rows[0]?.count ?? '0'} orders`;
     });
   }

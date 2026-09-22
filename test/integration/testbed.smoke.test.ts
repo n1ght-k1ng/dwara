@@ -24,7 +24,16 @@ async function ssh(host: string, command: string): Promise<string> {
 }
 
 async function httpStatus(url: string): Promise<number> {
-  const { stdout } = await exec('curl', ['-sk', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '10', url]);
+  const { stdout } = await exec('curl', [
+    '-sk',
+    '-o',
+    '/dev/null',
+    '-w',
+    '%{http_code}',
+    '--max-time',
+    '10',
+    url,
+  ]);
   return Number(stdout.trim());
 }
 
@@ -36,7 +45,9 @@ describeTestbed('testbed', () => {
   it.each(LAB_HOSTS)('%s has a working systemd', async (host) => {
     // `degraded` is acceptable: a single failed unit should not mask an
     // otherwise usable host, and diagnosing that is the point of the lab.
-    expect(['running', 'degraded']).toContain(await ssh(host, 'systemctl is-system-running || true'));
+    expect(['running', 'degraded']).toContain(
+      await ssh(host, 'systemctl is-system-running || true'),
+    );
   });
 
   it('refuses password authentication', async () => {
@@ -62,7 +73,12 @@ describeTestbed('testbed', () => {
   it('serves a healthy stack through the reverse proxy', async () => {
     expect(await httpStatus('https://127.0.0.1:8443/health')).toBe(200);
 
-    const { stdout } = await exec('curl', ['-sk', '--max-time', '10', 'https://127.0.0.1:8443/health']);
+    const { stdout } = await exec('curl', [
+      '-sk',
+      '--max-time',
+      '10',
+      'https://127.0.0.1:8443/health',
+    ]);
     const body = JSON.parse(stdout) as {
       status: string;
       checks: Record<string, { ok: boolean; detail: string }>;

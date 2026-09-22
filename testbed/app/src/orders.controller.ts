@@ -14,8 +14,12 @@ export class OrdersController {
     const cached = await this.deps.redis.get('orders:latest').catch(() => null);
     if (cached) return { orders: JSON.parse(cached) as unknown[], cached: true };
 
-    const { rows } = await this.deps.pool.query('SELECT id, sku, quantity, created_at FROM orders ORDER BY id DESC LIMIT 20');
-    await this.deps.redis.set('orders:latest', JSON.stringify(rows), 'EX', 10).catch(() => undefined);
+    const { rows } = await this.deps.pool.query(
+      'SELECT id, sku, quantity, created_at FROM orders ORDER BY id DESC LIMIT 20',
+    );
+    await this.deps.redis
+      .set('orders:latest', JSON.stringify(rows), 'EX', 10)
+      .catch(() => undefined);
     return { orders: rows, cached: false };
   }
 
