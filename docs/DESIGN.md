@@ -1,0 +1,263 @@
+# Dwara — Design
+
+## 1. Scope
+
+**MVP:** give any MCP-capable coding agent safe, policy-controlled access to Linux servers over SSH, with typed
+tools, snapshots, verification, rollback, and an audit trail. Deepest integration with Claude Code.
+
+**Non-goals (MVP):** always-on daemon, alerts, web dashboard, hosted service, Kubernetes, non-systemd distros,
+Windows servers, multi-user approvals, destructive tools.
+
+## 2. High-level architecture
+
+```
+Developer machine                                          Servers
+┌───────────────────────────────────────────────┐
+│ Coding agent (Claude Code, Codex, Cursor, …)  │
+│   │ MCP (stdio)             │ Bash tool       │
+│   ▼                         ▼                 │
+│ ┌─────────────┐      ┌──────────────┐         │
+│ │ MCP server  │      │ PreToolUse   │ blocks  │
+│ └─────┬───────┘      │ hook         │ raw ssh │
+│       ▼              └──────────────┘         │
+│ ┌──────────────── Core ──────────────────┐    │
+│ │ Registry → Policy → Snapshot → Execute │    │
+│ │ → Verify → Redact → Audit              │    │
+│ └─────────────────┬──────────────────────┘    │
+│                   ▼                           │
+│      SSH transport (system ssh, ControlMaster)│── SSH ──▶ hosts
+│ CLI: init · doctor · approve · audit ·        │
+│      rollback · eval                          │
+│ .dwara/: policy.yaml · runbooks/ · audit     │
+└───────────────────────────────────────────────┘
+```
+
+| Component | Responsibility |
+|---|---|
+| CLI | init, doctor, approve, audit, rollback, eval |
+| MCP server | Thin stdio adapter exposing registry tools and runbook resources |
+| Tool registry | Tool definitions: schema, risk, command builder, parser, snapshot, verify, rollback |
+| Policy engine | allow / approval / deny per host and risk; independent of the model |
+| SSH transport | Runs argv via system `ssh`; reuses user config, keys, agents, jump hosts |
+| Snapshot manager | Server-side backups before any change |
+| Verifier | Postcondition checks; triggers auto-rollback |
+| Redactor | Removes secrets from all output |
+| Audit logger | Append-only, hash-chained JSONL |
+| Hook | Blocks raw SSH to managed hosts from the agent's Bash tool |
+| Plugin | Claude Code commands, skill, hook config, permission settings |
+| Eval harness | Dockerized scenarios, headless agent runs, scoring |
+
+## 3. Tool call pipeline
+
+1. Validate input with zod.
+2. Resolve host against SSH config and policy (unknown host → deny).
+3. Policy decision: allow / approval / deny.
+4. If approval required: return plan + plan hash + approval ID; stop.
+5. Snapshot if the tool mutates state.
+6. Execute argv commands with timeout and output cap.
+7. Verify postconditions; on failure restore snapshot and report.
+8. Parse, redact, wrap in untrusted-data envelope.
+9. Write audit entry; return result.
+
+## 4. Security model
+
+- The model is untrusted and may be prompt-injected. Safety lives in code only.
+- Server output is untrusted data: redacted, truncated, wrapped, flagged if suspicious.
+- The agent can never approve its own action.
+- No arbitrary shell tool. All remote commands are templated argv arrays, escaped per element.
+- Destructive risk class is denied in MVP.
+- The hook is defense in depth, not a sandbox. The strong guarantee is the dedicated-key setup: the agent's normal
+  shell has no credentials for managed hosts; only Dwara does.
+
+## 5. Core types
+
+```ts
+export enum Risk { Read = "read", Reversible = "reversible", Config = "config", Destructive = "destructive" }
+
+export interface RemoteCommand {
+  argv: string[];        // each element escaped individually
+  sudo?: boolean;        // sudo -n only
+  timeoutMs: number;
+}
+
+export interface ToolDef<I, O> {
+  name: string;
+  description: string;   // for the model: when to use, what it returns, what to check next
+  risk: Risk;
+  input: z.ZodType<I>;   // always includes `host`
+  build(input: I): RemoteCommand[];
+  parse(raw: RawResult[]): O;
+  snapshot?(input: I): SnapshotSpec;          // required for reversible/config
+  verify?(input: I, ctx: Ctx): Promise<VerifyResult>;
+  rollback?(snap: SnapshotRef): RemoteCommand[];
+  maxOutputBytes?: number;
+}
+
+export type Decision =
+  | { kind: "allow" }
+  | { kind: "approval"; reason: string }
+  | { kind: "deny"; reason: string };
+```
+
+## 6. Policy
+
+```yaml
+version: 1
+defaults:
+  allow: [read]
+  require_approval: [reversible, config]
+  deny: [destructive]
+hosts:
+  - match: "prod-*"
+    tags: [production]
+    require_approval: [reversible, config]
+    health_checks:
+      - http: "https://localhost/health"
+        expect_status: 200
+  - match: "staging-*"
+    allow: [read, reversible]
+    require_approval: [config]
+tools:
+  never: [delete_volume, drop_database]
+  overrides:
+    prune_images: { allow_on: ["*"] }
+redaction:
+  extra_patterns: []
+limits:
+  max_actions_per_session: 20
+  max_hosts_per_action: 1
+```
+
+**Evaluation:**
+1. Host not in SSH config or policy → deny.
+2. Tool in `never` → deny.
+3. Most specific host rule merged over defaults.
+4. Precedence: deny > require_approval > allow.
+5. Overrides applied; can never loosen `never` or `deny`.
+6. Session limits checked.
+7. Return decision + reason. Policy file hash recorded in every audit entry.
+
+## 7. SSH transport
+
+- `ssh [-F cfg] -o BatchMode=yes -o ControlMaster=auto -o ControlPath=~/.dwara/cm-%C -o ControlPersist=60s <host> -- <escaped argv>`
+- Reject NUL and control characters in arguments.
+- Default timeout 30s, output cap 64 KB, `truncated` flag.
+- `sudo -n` only; on password requirement return a setup hint.
+
+## 8. Tool catalog (MVP)
+
+| Tool | Risk | Snapshot | Verify |
+|---|---|---|---|
+| host_overview | read | – | – |
+| service_status | read | – | – |
+| tail_logs (journal/file, time window, grep) | read | – | – |
+| disk_usage (dirs + docker) | read | – | – |
+| docker_ps, container_logs, container_inspect | read | – | – |
+| open_ports, cert_expiry | read | – | – |
+| read_config (allowlisted paths) | read | – | – |
+| security_audit | read | – | – |
+| restart_service, restart_container | reversible | state record | active/healthy and stable N s |
+| prune_images, rotate_logs | reversible | removal list | space freed |
+| edit_config (unified diff; plan + apply) | config | file copy | validator, then service healthy |
+| rollback | config | – | restored hashes match |
+
+MCP tool names are prefixed by risk (`read_*`, `reversible_*`, `config_*`) so client permission rules can match them.
+
+## 9. Approval flow
+
+1. **Client permission prompts** (Claude Code): plugin settings auto-allow `read_*`, prompt for others.
+2. **Plan binding:** `config_*` tools first return a plan (diff, commands, validator, rollback) and plan hash
+   without executing; apply requires the identical hash.
+3. **CLI fallback:** `approval_required` with ID → user runs `dwara approve <id>` → short-lived approval bound to
+   plan hash stored locally → agent retries.
+4. No MCP tool can create or modify approvals.
+
+## 10. Snapshots and rollback
+
+- Server path: `/var/lib/dwara/snapshots/<id>/` with files, modes, owners, SHA-256, `meta.json`.
+- Snapshot ID recorded in the local audit log.
+- edit_config: snapshot → apply diff → validator → reload → verify; failure at any step → restore + reload.
+- Retention: last 20 per host or 7 days.
+- `dwara rollback <id>` works without the agent.
+
+## 11. Verifier
+
+- Service `active` and stable ≥ 10 s (catches crash loops).
+- Container running; health check passing if defined.
+- Optional HTTP checks from policy.
+- Validator commands.
+- Retries with backoff up to a timeout; structured result included in tool output.
+
+## 12. Redactor
+
+- Patterns: private key blocks, cloud keys, JWTs, bearer tokens, common API key formats, `password=`, URLs with
+  credentials, connection strings.
+- Entropy check for long random strings near secret-like keywords.
+- Replace with `[REDACTED:<type>]`.
+- Extra patterns from policy.
+- Tested against a corpus (≥100 positives, ≥100 negatives).
+
+## 13. Prompt-injection defenses
+
+- Output envelope marks server content as untrusted data.
+- Flag suspicious content (text addressing the AI, instructions to change security settings).
+- Structural defense: typed tools, policy, denied destructive class, human approval for config.
+- Benchmark includes injection scenarios.
+
+## 14. Audit log
+
+`.dwara/audit.jsonl`:
+```json
+{"ts":"…","session":"s_8f2","agent":"claude-code","tool":"config_edit_config","host":"lab-api",
+ "risk":"config","decision":"approval","approved_by":"client_prompt","plan_hash":"…",
+ "snapshot":"snap_1a9","result":"verified","duration_ms":4120,
+ "policy_hash":"…","prev_hash":"…","hash":"…"}
+```
+`dwara audit` (timeline, filters) and `dwara audit verify` (chain integrity).
+
+## 15. PreToolUse hook
+
+- Reads hook JSON from stdin; only inspects Bash tool calls.
+- Parses with shell-quote; detects ssh/scp/rsync/sftp/mosh to managed hosts, including inside `bash -c`, `eval`,
+  `$(...)`, backticks, `xargs`, env prefixes, and scripts.
+- Blocks with a message that names the Dwara tools to use.
+- Fails closed when a command can't be parsed and mentions a managed host.
+- Optional policy flag to allow raw SSH to non-production hosts.
+
+## 16. Claude Code plugin
+
+- Commands: `/diagnose <host>`, `/fix`, `/harden <host>`, `/rollback`, `/audit`.
+- Skill: evidence first with read tools, consult runbooks, smallest reversible fix, verify, summarize with evidence.
+- `hooks.json` registering the PreToolUse hook.
+- Permission settings: `read_*` allowed, others prompt.
+- Runbooks exposed as MCP resources.
+
+## 17. `dwara init`
+
+1. Parse `~/.ssh/config` (incl. `Include`); list hosts.
+2. Select managed hosts; tag production.
+3. Run doctor.
+4. Write `.dwara/policy.yaml`; update `.gitignore`.
+5. Register MCP server with Claude Code; print snippets for other agents.
+6. Offer plugin install.
+7. Print a suggested first prompt.
+
+## 18. Eval harness
+
+- Scenario: `compose.yaml`/overlay, `break.sh`, `prompt.txt`, `check.sh`, `meta.yaml`.
+- 20 scenarios: 12 fix, 5 injection, 3 should-refuse.
+- Runner: reset → break → headless agent run (`claude -p` with Dwara MCP config) → collect audit → check → score →
+  reset. Baseline mode: raw SSH without Dwara.
+- Metrics: resolution rate, unsafe attempts, injection success rate, correct refusals, tool calls, tokens, cost,
+  time to resolution.
+
+## 19. Testing strategy
+
+- Unit: policy table tests, escaping property tests, redactor corpus, audit chain, hook parsing and evasion.
+- Integration: every tool against the testbed (success, failure, timeout, rollback).
+- Security: input fuzzing for injection, approval-bypass attempts, red-team sessions.
+- CI: unit + lint + typecheck on PR; integration on PR with testbed; evals on demand.
+
+## 20. Decisions
+
+Record decisions here as `YYYY-MM-DD — decision — reason`.

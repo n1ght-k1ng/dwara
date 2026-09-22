@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+*.tsbuildinfo
+coverage/
+
+# dwara local state (never commit policy-local state, audit logs, or keys)
+.dwara/
+testbed/.keys/
+
+# planning archive (contents live in docs/)
+dwara-plan.zip
+
+# editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# env
+.env
+.env.*
+!.env.example
