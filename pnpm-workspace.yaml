@@ -1,0 +1,8 @@
+# testbed/app is deliberately NOT a workspace package: it is throwaway lab code
+# with its own heavy dependency tree, built only inside Docker.
+packages:
+  - 'packages/*'
+
+# esbuild ships a platform binary that its install script places; tsup needs it.
+onlyBuiltDependencies:
+  - esbuild

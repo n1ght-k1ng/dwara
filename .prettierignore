@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+testbed/.keys
+
+# Authored prose: keep the original wrapping
+docs
+CLAUDE.md

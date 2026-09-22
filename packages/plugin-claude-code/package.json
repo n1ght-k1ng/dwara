@@ -1,0 +1,13 @@
+{
+  "name": "@dwara/plugin-claude-code",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Claude Code plugin: slash commands, investigation skill, hooks.json, permission settings",
+  "license": "Apache-2.0",
+  "files": [
+    "commands",
+    "skills",
+    "hooks.json",
+    ".claude-plugin"
+  ]
+}

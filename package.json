@@ -1,0 +1,40 @@
+{
+  "name": "dwara-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Policy-controlled SSH access for AI coding agents",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.21.0",
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" run build",
+    "clean": "pnpm -r --filter \"./packages/**\" run clean",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --project unit",
+    "test:watch": "vitest --project unit",
+    "test:integration": "vitest run --project integration",
+    "testbed:up": "./testbed/scripts/up.sh",
+    "testbed:down": "./testbed/scripts/down.sh",
+    "testbed:reset": "./testbed/scripts/reset.sh",
+    "testbed:status": "./testbed/scripts/status.sh",
+    "testbed:break": "./testbed/scripts/break.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@types/node": "^20.19.9",
+    "eslint": "^9.37.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^3.2.4"
+  }
+}

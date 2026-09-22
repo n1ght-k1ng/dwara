@@ -1,0 +1,29 @@
+{
+  "name": "@dwara/hook",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dwara PreToolUse hook: blocks raw SSH to managed hosts",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "bin": {
+    "dwara-hook": "./dist/index.js"
+  }
+}
