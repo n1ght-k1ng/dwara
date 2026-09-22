@@ -1,0 +1,54 @@
+# Example Dwara policy for the testbed.
+#
+# Committed so `dwara doctor` and the integration tests have something realistic
+# to run against. A real policy lives in .dwara/policy.yaml, which is gitignored.
+#
+# Only lab-* hosts appear here. Nothing in this repository may point Dwara at a
+# machine outside the testbed.
+
+version: 1
+
+defaults:
+  allow: [read]
+  require_approval: [reversible, config]
+  deny: [destructive]
+
+hosts:
+  # The lab's stand-in for production: everything that changes state needs a
+  # human, and its health is checked through the reverse proxy.
+  - match: 'lab-api'
+    tags: [production]
+    require_approval: [reversible, config]
+    health_checks:
+      - http: 'https://127.0.0.1:8443/health'
+        expect_status: 200
+
+  - match: 'lab-db'
+    tags: [production, stateful]
+    require_approval: [reversible, config]
+
+  - match: 'lab-cache'
+    tags: [production]
+    require_approval: [reversible, config]
+
+  - match: 'lab-queue'
+    tags: [production, stateful]
+    require_approval: [reversible, config]
+
+  # Staging is where reversible changes may happen without asking, which is the
+  # difference this lab exists to exercise.
+  - match: 'lab-staging'
+    tags: [staging]
+    allow: [read, reversible]
+    require_approval: [config]
+
+tools:
+  never: []
+  overrides: {}
+
+redaction:
+  extra_patterns: []
+
+limits:
+  max_actions_per_session: 20
+  max_hosts_per_action: 1
