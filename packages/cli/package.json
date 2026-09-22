@@ -25,5 +25,9 @@
   },
   "bin": {
     "dwara": "./dist/index.js"
+  },
+  "dependencies": {
+    "@dwara/core": "workspace:*",
+    "commander": "^14.0.3"
   }
 }

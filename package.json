@@ -24,13 +24,16 @@
     "testbed:down": "./testbed/scripts/down.sh",
     "testbed:reset": "./testbed/scripts/reset.sh",
     "testbed:status": "./testbed/scripts/status.sh",
-    "testbed:break": "./testbed/scripts/break.sh"
+    "testbed:break": "./testbed/scripts/break.sh",
+    "test:coverage": "vitest run --project unit --coverage"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",
     "@types/node": "^20.19.9",
+    "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9.37.0",
     "eslint-config-prettier": "^10.1.8",
+    "fast-check": "^4.10.2",
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",

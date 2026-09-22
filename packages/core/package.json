@@ -22,5 +22,14 @@
   "scripts": {
     "build": "tsup",
     "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "devDependencies": {
+    "@types/shell-quote": "^1.7.5"
+  },
+  "dependencies": {
+    "execa": "^9.6.1",
+    "shell-quote": "^1.10.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
   }
 }
