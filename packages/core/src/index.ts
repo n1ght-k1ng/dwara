@@ -33,3 +33,9 @@ export { parseSshConfig, resolveHost } from './ssh/config.js';
 export type { SshConfig, SshHostBlock, ResolvedHost } from './ssh/config.js';
 export { SshTransport, DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS } from './ssh/transport.js';
 export type { TransportOptions } from './ssh/transport.js';
+
+export { Redactor, defaultRedactor } from './redact/redact.js';
+export type { RedactionReport, RedactorOptions } from './redact/redact.js';
+export { shannonEntropy, looksLikeSecret, findEntropySecrets } from './redact/entropy.js';
+export { RULES as REDACTION_RULES } from './redact/patterns.js';
+export type { RedactionRule } from './redact/patterns.js';
