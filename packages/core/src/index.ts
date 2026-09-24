@@ -39,3 +39,6 @@ export type { RedactionReport, RedactorOptions } from './redact/redact.js';
 export { shannonEntropy, looksLikeSecret, findEntropySecrets } from './redact/entropy.js';
 export { RULES as REDACTION_RULES } from './redact/patterns.js';
 export type { RedactionRule } from './redact/patterns.js';
+
+export { wrap, findSuspicions } from './envelope.js';
+export type { Envelope, Suspicion, SuspicionKind, WrapOptions } from './envelope.js';
