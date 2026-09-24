@@ -42,3 +42,10 @@ export type { RedactionRule } from './redact/patterns.js';
 
 export { wrap, findSuspicions } from './envelope.js';
 export type { Envelope, Suspicion, SuspicionKind, WrapOptions } from './envelope.js';
+
+export { AuditLog, DEFAULT_AUDIT_PATH } from './audit/log.js';
+export type { AuditLogOptions } from './audit/log.js';
+export { verifyChain } from './audit/verify.js';
+export type { ChainReport, ChainProblem } from './audit/verify.js';
+export { auditEntrySchema, canonicalise, hashEntry, GENESIS_HASH } from './audit/entry.js';
+export type { AuditEntry, AuditInput } from './audit/entry.js';
