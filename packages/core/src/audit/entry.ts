@@ -31,7 +31,16 @@ export const auditEntrySchema = z
     code: z.string().optional(),
     /** Tool arguments, redacted. */
     input: z.record(z.string(), z.unknown()).default({}),
-    result: z.enum(['ok', 'failed', 'refused', 'error']),
+    /**
+     * `verified` and `rolled_back` are the mutation outcomes: a change whose
+     * postconditions held, and one whose did not and was undone. Kept distinct
+     * from `ok` and `failed` because "the command exited zero" and "the change
+     * actually worked" are different claims, and only the second is worth
+     * anything after the fact.
+     */
+    result: z.enum(['ok', 'verified', 'rolled_back', 'failed', 'refused', 'error']),
+    /** Snapshot taken before a mutation, so `dwara rollback` can find it. */
+    snapshot: z.string().optional(),
     /** Short, redacted summary — never the tool's output. */
     detail: z.string().default(''),
     duration_ms: z.number().int().nonnegative().default(0),

@@ -124,6 +124,28 @@ hold: in the tool.
 
 404 unit tests, 64 integration.
 
+**Task 4 — transactional pipeline (2026-09-28).** `feat(core)`.
+
+DESIGN §3 steps 5 and 7 are real now: snapshot → act → verify → roll back on failure.
+
+- **A mutating tool that cannot be snapshotted does not run at all.** `SNAPSHOT_FAILED`,
+  and nothing reaches the host. Changing a machine while believing in a restore point
+  that does not exist is worse than refusing.
+- **The undo has two halves, in order.** `restoreSnapshot` puts the bytes back and
+  proves it against the recorded hashes; then the tool's own `rollback` commands run,
+  because bytes on disk are not the whole state — a restored config does nothing until
+  the service reloads.
+- **`VERIFY_FAILED` and `ROLLBACK_FAILED` are different results.** The first says the
+  host is back as it was. The second is the worst thing Dwara can produce and says so,
+  naming the snapshot and the `dwara rollback` command to run.
+- The store is pruned after a change that stuck, and **not** after a rollback, so the
+  evidence survives.
+- Audit `result` gained `verified` and `rolled_back`, plus a `snapshot` field. "The
+  command exited zero" and "the change actually worked" are different claims, and only
+  the second is worth anything after the fact.
+
+414 unit tests, 64 integration.
+
 ## Done
 
 **Repo setup**

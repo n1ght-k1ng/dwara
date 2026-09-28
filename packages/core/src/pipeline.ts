@@ -6,6 +6,9 @@ import type { LoadedPolicy } from './policy/load.js';
 import { selectHostRules } from './policy/match.js';
 import { defaultRedactor, type Redactor } from './redact/redact.js';
 import type { RegisteredTool, ToolRegistry } from './registry.js';
+import { createSnapshot, restoreSnapshot } from './snapshot/manager.js';
+import { pruneSnapshots } from './snapshot/retention.js';
+import { summariseVerify } from './verify/run.js';
 import type { Session } from './session.js';
 import type { SshConfig } from './ssh/config.js';
 import type {
@@ -14,8 +17,10 @@ import type {
   HttpCheck,
   RawResult,
   RemoteCommand,
+  RollbackOutcome,
   SnapshotRef,
   ToolResult,
+  VerifyResult,
 } from './types.js';
 
 /** What the pipeline needs to run a command. `SshTransport` satisfies it. */
@@ -147,9 +152,47 @@ export class Pipeline {
     // against the session budget whatever happens next.
     session.recordExecuted();
 
+    // 5a · Snapshot, before anything changes. A mutating tool that cannot be
+    // backed up does not run at all: the alternative is changing a host while
+    // believing in a restore point that does not exist.
+    let snapshot: SnapshotRef | undefined;
+    if (tool.mutates) {
+      const spec = tool.snapshot(validated);
+      try {
+        // The registry refuses to accept a mutating tool with no snapshot(),
+        // so a missing spec here would be a bug in this file, not in the tool.
+        snapshot = await createSnapshot(spec ?? { paths: [] }, this.context(host, session));
+      } catch (err) {
+        const error = DwaraError.from(err, 'SNAPSHOT_FAILED');
+        await this.write({
+          tool,
+          name,
+          host,
+          session,
+          decision,
+          input,
+          result: 'error',
+          detail: `nothing was changed: ${error.message}`,
+          code: error.code,
+          startedAt,
+        });
+
+        return {
+          ok: false,
+          tool: name,
+          host,
+          decision,
+          error: this.redactor.redactDeep(error.toJSON()),
+          durationMs: Date.now() - startedAt,
+        };
+      }
+    }
+
+    const ctx = this.context(host, session, snapshot);
+
     let raws: RawResult[];
     try {
-      raws = await this.run(tool, validated, host, this.context(host, session));
+      raws = await this.run(tool, validated, host, ctx);
     } catch (err) {
       const error = DwaraError.from(err);
       await this.write({
@@ -163,6 +206,7 @@ export class Pipeline {
         detail: error.message,
         code: error.code,
         startedAt,
+        ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
       });
 
       return {
@@ -172,6 +216,9 @@ export class Pipeline {
         decision,
         // Even an error message is server-influenced: stderr reaches it.
         error: this.redactor.redactDeep(error.toJSON()),
+        // The action died part-way. The snapshot is the way back, and the id
+        // has to reach the caller or `dwara rollback` has nothing to work with.
+        ...(snapshot === undefined ? {} : { snapshot }),
         durationMs: Date.now() - startedAt,
       };
     }
@@ -216,6 +263,81 @@ export class Pipeline {
       };
     }
 
+    // 7 · Verify, and undo if the postconditions do not hold. This is the
+    // guarantee the whole phase exists for: a change that did not work is not
+    // left in place for a human to find later.
+    let verify: VerifyResult | undefined;
+    let rollback: RollbackOutcome | undefined;
+
+    if (tool.mutates) {
+      verify = await tool.verify(validated, ctx);
+
+      if (verify !== undefined && !verify.ok) {
+        rollback = await this.undo(tool, snapshot, ctx);
+
+        const error = rollback.ok
+          ? new DwaraError(
+              'VERIFY_FAILED',
+              `${name} did not work, and was undone: ${summariseVerify(verify)}`,
+              {
+                details: {
+                  tool: name,
+                  host,
+                  ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+                },
+                hint: 'the host is back as it was; read the failing check and try a different change',
+              },
+            )
+          : new DwaraError(
+              'ROLLBACK_FAILED',
+              `${name} did not work and could not be undone: ${summariseVerify(verify)}. Rollback: ${rollback.detail}`,
+              {
+                details: {
+                  tool: name,
+                  host,
+                  ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+                },
+                // The loudest thing Dwara can say. A human has to look.
+                hint:
+                  snapshot === undefined
+                    ? 'this host needs a human; Dwara could not restore it'
+                    : `this host needs a human. Try: dwara rollback ${snapshot.id}`,
+              },
+            );
+
+        await this.write({
+          tool,
+          name,
+          host,
+          session,
+          decision,
+          input,
+          result: 'rolled_back',
+          detail: error.message,
+          code: error.code,
+          startedAt,
+          ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+        });
+
+        return {
+          ok: false,
+          tool: name,
+          host,
+          decision,
+          error: this.redactor.redactDeep(error.toJSON()),
+          verify,
+          rollback,
+          ...(snapshot === undefined ? {} : { snapshot }),
+          durationMs: Date.now() - startedAt,
+        };
+      }
+
+      // The change stuck. Tidy the store now rather than letting it grow until
+      // a full disk becomes the next incident; a failure here is not the
+      // caller's problem, since the action itself succeeded.
+      await pruneSnapshots(ctx).catch(() => undefined);
+    }
+
     const redacted = this.redactor.redactDeep(data);
     const envelope = wrap(redacted, {
       host,
@@ -228,7 +350,7 @@ export class Pipeline {
 
     const failed = raws.some((raw) => raw.exitCode !== 0);
 
-    // 7 · Audit.
+    // 8 · Audit.
     await this.write({
       tool,
       name,
@@ -236,9 +358,15 @@ export class Pipeline {
       session,
       decision,
       input,
-      result: failed ? 'failed' : 'ok',
-      detail: summarise(raws, envelope.suspicions.length),
+      result: failed ? 'failed' : verify === undefined ? 'ok' : 'verified',
+      detail: [
+        summarise(raws, envelope.suspicions.length),
+        verify === undefined ? '' : summariseVerify(verify),
+      ]
+        .filter((part) => part !== '')
+        .join('; '),
       startedAt,
+      ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
     });
 
     return {
@@ -248,6 +376,8 @@ export class Pipeline {
       decision,
       data: envelope,
       truncated,
+      ...(verify === undefined ? {} : { verify }),
+      ...(snapshot === undefined ? {} : { snapshot }),
       durationMs: Date.now() - startedAt,
     };
   }
@@ -275,6 +405,63 @@ export class Pipeline {
       results.push(await this.options.runner.run(host, command));
     }
     return results;
+  }
+
+  /**
+   * Puts a host back after a change that did not verify.
+   *
+   * Two steps, in this order. The snapshot restores the **bytes**, checked
+   * against the hashes taken before the change, because that is the part that
+   * can be proven. Then the tool's own `rollback` commands run, because bytes
+   * on disk are not the whole state — a restored config does nothing until the
+   * service reloads, and a unit that was stopped before needs stopping again.
+   *
+   * Never throws. The caller is already handling a failure and needs both
+   * outcomes in one result, not a second exception hiding the first.
+   */
+  private async undo(
+    tool: RegisteredTool,
+    snapshot: SnapshotRef | undefined,
+    ctx: Ctx,
+  ): Promise<RollbackOutcome> {
+    const notes: string[] = [];
+    let ok = true;
+
+    if (snapshot !== undefined && snapshot.paths.length > 0) {
+      try {
+        const restore = await restoreSnapshot(snapshot, ctx);
+        ok &&= restore.ok;
+        notes.push(restore.detail);
+      } catch (err) {
+        ok = false;
+        notes.push(`restoring files threw: ${DwaraError.from(err).message}`);
+      }
+    }
+
+    const commands = snapshot === undefined ? undefined : tool.rollback(snapshot);
+    if (commands !== undefined && commands.length > 0) {
+      try {
+        for (const command of commands) {
+          const result = await ctx.run(command);
+          if (result.exitCode !== 0) {
+            ok = false;
+            notes.push(
+              `${command.argv.join(' ')} exited ${result.exitCode}: ${result.stderr.trim().split('\n')[0] ?? ''}`,
+            );
+          }
+        }
+        if (ok) notes.push(`${commands.length} recovery command(s) ran`);
+      } catch (err) {
+        ok = false;
+        notes.push(`recovery commands threw: ${DwaraError.from(err).message}`);
+      }
+    }
+
+    return {
+      attempted: true,
+      ok,
+      detail: notes.length > 0 ? notes.join('; ') : 'nothing needed restoring',
+    };
   }
 
   /** The execution context handed to `apply`, `verify` and `rollback`. */
@@ -351,10 +538,11 @@ export class Pipeline {
     session: Session;
     decision: Decision;
     input: unknown;
-    result: 'ok' | 'failed' | 'refused' | 'error';
+    result: 'ok' | 'verified' | 'rolled_back' | 'failed' | 'refused' | 'error';
     detail?: string;
     code?: string;
     startedAt: number;
+    snapshot?: string;
   }): Promise<void> {
     await this.options.audit.append({
       session: args.session.id,
@@ -365,6 +553,7 @@ export class Pipeline {
       decision: args.decision.kind,
       rule: args.decision.rule,
       ...(args.code === undefined ? {} : { code: args.code }),
+      ...(args.snapshot === undefined ? {} : { snapshot: args.snapshot }),
       input: asRecord(args.input),
       result: args.result,
       detail: args.detail ?? '',

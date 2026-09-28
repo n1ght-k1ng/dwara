@@ -10,7 +10,7 @@ import { parsePolicy } from './policy/load.js';
 import { ToolRegistry } from './registry.js';
 import { Session } from './session.js';
 import type { SshConfig } from './ssh/config.js';
-import { Risk, type Ctx, type RawResult, type ToolDef } from './types.js';
+import { Risk, type Ctx, type RawResult, type RemoteCommand, type ToolDef } from './types.js';
 
 const POLICY = `
 version: 1
@@ -466,6 +466,246 @@ describe('Pipeline auditing', () => {
 
     const [entry] = await audit.read();
     expect(entry?.rule).toBe('defaults');
+  });
+});
+
+/**
+ * A mutating tool, and a fake host that answers the snapshot manager
+ * convincingly enough for the pipeline to get past it.
+ *
+ * `verifyOk` decides whether the postconditions hold; `rollbackOk` whether the
+ * undo works. Between them they cover the four outcomes the pipeline has to
+ * distinguish.
+ */
+function mutatingTool(options: {
+  verifyOk: boolean;
+  rollbackOk?: boolean;
+  paths?: readonly string[];
+  onVerify?: () => void;
+}): EchoTool {
+  const paths = options.paths ?? ['/etc/thing.conf'];
+  return {
+    name: 'restart_thing',
+    description: 'Test mutating tool.',
+    risk: Risk.Reversible,
+    input: z.object({ host: z.string(), unit: z.string() }).strict(),
+    build: (input) => [{ argv: ['systemctl', 'restart', input.unit], timeoutMs: 5000 }],
+    parse: (raws) => ({ unit: 'x', text: raws.map((item) => item.stdout).join('') }),
+    snapshot: () => ({ paths, units: ['thing'] }),
+    verify: () => {
+      options.onVerify?.();
+      return Promise.resolve({
+        ok: options.verifyOk,
+        checks: [
+          { name: 'thing active', ok: options.verifyOk, detail: 'thing is inactive (dead)' },
+        ],
+        durationMs: 5,
+      });
+    },
+    rollback: () => [{ argv: ['systemctl', 'start', 'thing'], timeoutMs: 5000 }],
+  };
+}
+
+/**
+ * A runner that plays a host with a working snapshot store.
+ *
+ * `sha256sum` answers the same hash for an original and its copy, so the
+ * manager's self-check passes; `failOn` makes one program fail so the pipeline's
+ * error paths can be reached.
+ */
+function snapshotRunner(options: { failOn?: string; driftAfterRestore?: boolean } = {}) {
+  const calls: { host: string; argv: readonly string[] }[] = [];
+  let restored = false;
+
+  return {
+    calls,
+    async run(host: string, command: RemoteCommand): Promise<RawResult> {
+      calls.push({ host, argv: command.argv });
+      const [program, ...args] = command.argv;
+      const base = { argv: command.argv, stderr: '', truncated: false, durationMs: 1 };
+
+      if (program === options.failOn) {
+        return { ...base, exitCode: 1, stdout: '', stderr: `${program}: refused` };
+      }
+      if (program === 'stat') {
+        const files = args.filter((arg) => arg.startsWith('/etc/') || arg.startsWith('/var/'));
+        return { ...base, exitCode: 0, stdout: files.map((f) => `${f}|644|root|root`).join('\n') };
+      }
+      if (program === 'sha256sum') {
+        // Same hash for a file and its snapshot copy, so the self-check passes.
+        // After a restore, optionally drift, to model a restore that lied.
+        const drift = options.driftAfterRestore === true && restored;
+        const lines = args
+          .filter((arg) => arg !== '--')
+          .map((arg) => `${drift ? 'd'.repeat(64) : 'a'.repeat(64)}  ${arg}`);
+        return { ...base, exitCode: 0, stdout: lines.join('\n') };
+      }
+      if (program === 'cp' && args.includes('--preserve=all') && !args.includes('--parents')) {
+        restored = true;
+      }
+      return { ...base, exitCode: 0, stdout: 'done\n' };
+    },
+  };
+}
+
+const STAGING_POLICY = `
+version: 1
+defaults:
+  allow: [read]
+  require_approval: [config]
+  deny: [destructive]
+hosts:
+  - match: "lab-*"
+    allow: [read, reversible]
+limits:
+  max_actions_per_session: 5
+  max_hosts_per_action: 1
+`;
+
+describe('Pipeline transactional execution', () => {
+  it('snapshots before it changes anything, then verifies', async () => {
+    const runner = snapshotRunner();
+    const result = await build(runner, {
+      tools: [mutatingTool({ verifyOk: true })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, new Session());
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot?.id).toMatch(/^snap_[0-9a-f]{8}$/);
+    expect(result.verify?.ok).toBe(true);
+
+    const programs = runner.calls.map((call) => call.argv[0]);
+    // The restart cannot precede the snapshot that would undo it.
+    expect(programs.indexOf('systemctl')).toBeGreaterThan(programs.indexOf('cp'));
+    expect(programs).toContain('tee');
+  });
+
+  it('does not touch the host when the snapshot cannot be taken', async () => {
+    // The alternative is changing a host while believing in a restore point
+    // that does not exist.
+    const runner = snapshotRunner({ failOn: 'mkdir' });
+    const result = await build(runner, {
+      tools: [mutatingTool({ verifyOk: true })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, new Session());
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('SNAPSHOT_FAILED');
+    expect(runner.calls.some((call) => call.argv[0] === 'systemctl')).toBe(false);
+  });
+
+  it('rolls back automatically when verification fails', async () => {
+    const runner = snapshotRunner();
+    const result = await build(runner, {
+      tools: [mutatingTool({ verifyOk: false })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, new Session());
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('VERIFY_FAILED');
+    expect(result.rollback).toMatchObject({ attempted: true, ok: true });
+    // Both halves of the undo: the bytes, then the tool's own recovery.
+    expect(result.rollback?.detail).toMatch(/every hash matches/);
+    expect(runner.calls.some((call) => call.argv.join(' ') === 'systemctl start thing')).toBe(true);
+  });
+
+  it('reports the failing check, not just that verification failed', async () => {
+    const result = await build(snapshotRunner(), {
+      tools: [mutatingTool({ verifyOk: false })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, new Session());
+
+    expect(result.error?.message).toContain('thing is inactive (dead)');
+    expect(result.verify?.checks[0]?.name).toBe('thing active');
+  });
+
+  it('says loudly when the change failed and the undo failed too', async () => {
+    // The worst outcome Dwara can produce, and the one that must never be
+    // reported as an ordinary failure.
+    const runner = snapshotRunner({ driftAfterRestore: true });
+    const result = await build(runner, {
+      tools: [mutatingTool({ verifyOk: false })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, new Session());
+
+    expect(result.error?.code).toBe('ROLLBACK_FAILED');
+    expect(result.rollback?.ok).toBe(false);
+    expect(result.error?.hint).toMatch(/needs a human. Try: dwara rollback snap_[0-9a-f]{8}/);
+  });
+
+  it('keeps the snapshot id reachable when the action itself throws', async () => {
+    const runner = {
+      calls: [] as { host: string; argv: readonly string[] }[],
+      async run(host: string, command: RemoteCommand): Promise<RawResult> {
+        const inner = snapshotRunner();
+        if (command.argv[0] === 'systemctl' && command.argv[1] === 'restart') {
+          throw new Error('ssh: connection closed');
+        }
+        return inner.run(host, command);
+      },
+    };
+
+    const result = await build(runner, {
+      tools: [mutatingTool({ verifyOk: true })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, new Session());
+
+    expect(result.ok).toBe(false);
+    // Half-applied and the connection gone is exactly when a human needs the id.
+    expect(result.snapshot?.id).toMatch(/^snap_/);
+  });
+
+  it('never verifies a read tool or snapshots for one', async () => {
+    const runner = snapshotRunner();
+    const result = await build(runner).execute(
+      'echo_unit',
+      { host: 'lab-api', unit: 'nginx' },
+      new Session(),
+    );
+
+    expect(result.snapshot).toBeUndefined();
+    expect(result.verify).toBeUndefined();
+    expect(runner.calls.map((call) => call.argv[0])).toEqual(['systemctl']);
+  });
+
+  it('prunes the snapshot store after a change that stuck', async () => {
+    const runner = snapshotRunner();
+    await build(runner, {
+      tools: [mutatingTool({ verifyOk: true })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, new Session());
+
+    expect(runner.calls.some((call) => call.argv.includes('-mtime'))).toBe(true);
+  });
+
+  it('does not prune after a rollback, so the evidence survives', async () => {
+    const runner = snapshotRunner();
+    await build(runner, {
+      tools: [mutatingTool({ verifyOk: false })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, new Session());
+
+    expect(runner.calls.some((call) => call.argv.includes('-mtime'))).toBe(false);
+  });
+
+  it('records the outcome and the snapshot id in the audit log', async () => {
+    const session = new Session();
+    await build(snapshotRunner(), {
+      tools: [mutatingTool({ verifyOk: true })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, session);
+    await build(snapshotRunner(), {
+      tools: [mutatingTool({ verifyOk: false })],
+      policy: STAGING_POLICY,
+    }).execute('restart_thing', { host: 'lab-api', unit: 'thing' }, session);
+
+    const entries = await audit.read();
+
+    // "exited zero" and "the change actually worked" are different claims.
+    expect(entries[0]).toMatchObject({ result: 'verified', tool: 'reversible_restart_thing' });
+    expect(entries[1]?.result).toBe('rolled_back');
+    expect(entries[0]?.snapshot).toMatch(/^snap_/);
+    expect((await verifyChain(entries)).ok).toBe(true);
   });
 });
 
