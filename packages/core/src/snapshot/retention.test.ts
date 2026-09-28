@@ -32,12 +32,12 @@ function ids(count: number): string {
   return Array.from(
     { length: count },
     (_, i) => `${1_700_000_000 + i}.0 snap_${i.toString(16).padStart(8, '0')}`,
-  ).join('\n');
+  ).join(';');
 }
 
 describe('listSnapshots', () => {
   it('returns snapshots newest first', async () => {
-    const ctx = hostWith('1700000001.5 snap_00000001\n1700000009.0 snap_00000009\n');
+    const ctx = hostWith('1700000001.5 snap_00000001;1700000009.0 snap_00000009;');
 
     expect(await listSnapshots(ctx)).toEqual([
       { id: 'snap_00000009', modifiedAt: 1_700_000_009 },
@@ -54,7 +54,7 @@ describe('listSnapshots', () => {
         '1700000002.0 evil',
         '1700000003.0 ..',
         '1700000004.0 snap_zz',
-      ].join('\n'),
+      ].join(';'),
     );
 
     expect((await listSnapshots(ctx)).map((item) => item.id)).toEqual(['snap_00000001']);
@@ -80,6 +80,18 @@ describe('pruneSnapshots', () => {
 
     expect(result.removed).toEqual([]);
     expect(result.kept).toHaveLength(5);
+  });
+
+  it('never puts a control character in an argument, which the transport refuses', async () => {
+    // A `-printf '%T@ %f\n'` format cannot be sent at all: assertSafeArg rejects
+    // C0 controls, so the listing is semicolon-separated instead.
+    const ctx = hostWith(ids(1));
+    await pruneSnapshots(ctx);
+
+    for (const call of ctx.calls) {
+      // eslint-disable-next-line no-control-regex -- checking for them is the point
+      expect(call.argv.some((arg) => /[\u0000-\u001f\u007f]/u.test(arg))).toBe(false);
+    }
   });
 
   it('expires by age with no wildcard anywhere in the command', async () => {

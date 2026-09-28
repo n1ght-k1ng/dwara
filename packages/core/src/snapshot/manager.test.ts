@@ -180,6 +180,9 @@ describe('createSnapshot', () => {
       NGINX,
       `${snapshotDir(ref.id)}/files`,
     ]);
+    // One source per invocation, so the lab's sudoers rule can pin the
+    // destination. A batched cp would need a grant to copy anything anywhere.
+    expect(ctx.calls.filter((call) => call.argv[0] === 'cp')).toHaveLength(1);
   });
 
   it('leaves out a path that does not exist rather than failing', async () => {

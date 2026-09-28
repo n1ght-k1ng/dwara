@@ -38,5 +38,32 @@ Cmnd_Alias DWARA_AUDIT   = /usr/sbin/sshd -T
 # refusal to follow a symlink, rather than granting `find` or `cat` generally.
 Cmnd_Alias DWARA_READCONF = /usr/bin/find /etc/* -maxdepth 0 -type f ! -type l -exec cat {} +
 
-dwara ALL=(root) NOPASSWD: DWARA_SYSTEMD, DWARA_LOGS, DWARA_INSPECT, DWARA_AUDIT, DWARA_READCONF
+# Snapshots. The destination is pinned inside the snapshot store in every rule
+# that writes, which is only possible because the manager copies one file per
+# `cp`: a batched copy takes a variable number of sources, and the rule would
+# then have to end in a bare `*` -- a grant to copy anything anywhere as root.
+#
+# The sources are deliberately narrow. /etc and /var/log are where service
+# configuration and logs live, and nothing else is worth snapshotting.
+Cmnd_Alias DWARA_SNAPSHOT = /usr/bin/mkdir -p -- /var/lib/dwara/snapshots/*,        \
+                            /usr/bin/cp --preserve=all --parents -- /etc/* /var/lib/dwara/snapshots/*, \
+                            /usr/bin/cp --preserve=all --parents -- /var/log/* /var/lib/dwara/snapshots/*, \
+                            /usr/bin/cp --preserve=all -- /var/lib/dwara/snapshots/* /etc/*, \
+                            /usr/bin/cp --preserve=all -- /var/lib/dwara/snapshots/* /var/log/*, \
+                            /usr/bin/tee -- /var/lib/dwara/snapshots/*
+
+# Retention, written out in full rather than as `find /var/lib/dwara/snapshots *`.
+# A wildcard tail would permit `-exec rm -rf /etc {} +`, because find substitutes
+# {} into an argument list the caller controls. These three forms are the only
+# ones Dwara issues, and the single wildcard in each sits where find treats it as
+# a basename pattern or an mtime, never as a path.
+Cmnd_Alias DWARA_RETAIN = /usr/bin/find /var/lib/dwara/snapshots -mindepth 1 -maxdepth 1 -type d -printf *, \
+                          /usr/bin/find /var/lib/dwara/snapshots -mindepth 1 -maxdepth 1 -type d -mtime * -exec rm -rf {} +, \
+                          /usr/bin/find /var/lib/dwara/snapshots -mindepth 1 -maxdepth 1 -type d -name * -exec rm -rf {} +
+
+# rotate_logs.
+Cmnd_Alias DWARA_ROTATE = /usr/sbin/logrotate -f *, /usr/sbin/logrotate -s * -f *
+
+dwara ALL=(root) NOPASSWD: DWARA_SYSTEMD, DWARA_LOGS, DWARA_INSPECT, DWARA_AUDIT, DWARA_READCONF, \
+                           DWARA_SNAPSHOT, DWARA_RETAIN, DWARA_ROTATE
 Defaults:dwara !requiretty

@@ -5,3 +5,16 @@ Cmnd_Alias DWARA_NGINX = /usr/sbin/nginx -t,     \
                          /usr/bin/cat /etc/nginx/*
 
 dwara ALL=(root) NOPASSWD: DWARA_NGINX
+
+# restart_container, prune_images, and the verifier's container health check.
+# `docker image prune` is granted without -a: dangling layers only, never every
+# image not currently in use by a container.
+Cmnd_Alias DWARA_DOCKER = /usr/bin/docker restart *,      \
+                          /usr/bin/docker start *,        \
+                          /usr/bin/docker stop *,         \
+                          /usr/bin/docker inspect *,      \
+                          /usr/bin/docker images *,       \
+                          /usr/bin/docker image prune -f, \
+                          /usr/bin/docker image prune -f --filter *
+
+dwara ALL=(root) NOPASSWD: DWARA_DOCKER

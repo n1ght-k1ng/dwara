@@ -21,6 +21,14 @@ const workspaceAliases = {
 export default defineConfig({
   resolve: { alias: workspaceAliases },
   test: {
+    // One test file at a time. Every integration test shares the same five lab
+    // hosts and most of them change something: the doctor suite moves
+    // lab-staging's sudoers file away to check it is flagged, and Phase 3
+    // restarts services and rewrites files on the same host. Run in parallel,
+    // those collide — a snapshot restore failed with "sudo asked for a password"
+    // purely because doctor had the allowlist in its pocket at that moment.
+    // Unit tests are fast enough that serialising them costs little.
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.ts'],

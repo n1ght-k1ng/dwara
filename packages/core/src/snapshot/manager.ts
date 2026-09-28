@@ -150,14 +150,23 @@ export async function createSnapshot(spec: SnapshotSpec, ctx: Ctx): Promise<Snap
   );
 
   if (present.length > 0) {
+    // One `cp` per file, not one for all of them. A batched copy takes a
+    // variable number of source arguments, and a sudoers rule cannot then pin
+    // the destination — the lab would have to grant `cp --parents -- *`, which
+    // is a grant to copy anything anywhere as root. One source at a time lets
+    // the rule fix the destination inside the snapshot store, and it says which
+    // file failed when one does.
+    //
     // `--parents` mirrors each absolute path under the destination, so
     // /etc/nginx/nginx.conf lands at <dir>/files/etc/nginx/nginx.conf and two
     // files with the same basename cannot collide.
-    await must(
-      ctx,
-      sudo(['cp', '--preserve=all', '--parents', '--', ...present, `${dir}/files`]),
-      'could not copy the files into the snapshot',
-    );
+    for (const path of present) {
+      await must(
+        ctx,
+        sudo(['cp', '--preserve=all', '--parents', '--', path, `${dir}/files`]),
+        `could not copy ${path} into the snapshot`,
+      );
+    }
 
     // The step that makes this a snapshot rather than a hope.
     const copies = present.map((path) => copyOf(dir, path));

@@ -61,6 +61,42 @@ from stdout, not the exit code.
 
 377 unit tests.
 
+**Task 5, pulled forward — testbed grants and two missing binaries (2026-09-28).**
+`chore(testbed)`.
+
+Moved ahead of Tasks 3 and 4 because the snapshot manager could not be tested against
+a host without it.
+
+- **`logrotate` was missing from the lab images** and is now installed. `patch` is still
+  missing and stays that way: `edit_config` applies diffs locally (see DESIGN).
+- Snapshot, retention, rotate and docker verbs added to the lab sudoers. Every rule that
+  writes pins its destination, which is **why the manager copies one file per `cp`** — a
+  batched copy takes a variable number of sources and the rule would have to end in a
+  bare `*`, a grant to copy anything anywhere as root. Retention is written out in three
+  exact forms rather than `find /var/lib/dwara/snapshots *`, because a wildcard tail
+  would permit `-exec rm -rf /etc {} +`.
+- Verified on the host: all nine commands Dwara issues are permitted, and eight abuse
+  cases — `cp /etc/shadow /tmp`, `rm -rf /etc`, `tee -- /etc/passwd`,
+  `docker image prune -a -f`, `find /etc -exec rm` among them — are all refused.
+- 13 snapshot integration tests on `lab-staging`. The code under test goes over SSH with
+  only the grants the lab gives it; fixtures go in as root via `docker exec`, because
+  arranging the world is the harness's job and Dwara is deliberately not allowed to.
+
+**Two bugs this task caught before they shipped:**
+
+- **`find -printf '%T@ %f\n'` cannot be sent at all.** The transport rejects control
+  characters in arguments, so the newline in the format string would have thrown
+  `UNSAFE_ARGUMENT` the first time retention ran. The listing is semicolon-separated now.
+  Two of our own rules in direct conflict — the same shape as Phase 2's `docker_ps` tab.
+- **Integration tests were racing over shared hosts.** `doctor.test.ts` moves
+  lab-staging's sudoers file away to check it gets flagged, and vitest runs files in
+  parallel, so a snapshot restore failed with "sudo asked for a password" purely because
+  doctor had the allowlist in its pocket at that moment. Passed in isolation, failed in
+  the suite. `fileParallelism: false` — it is a root-level option in Vitest 3, not a
+  per-project one. This will matter far more as Phase 3 adds tests that restart services.
+
+378 unit tests, 53 integration.
+
 ## Done
 
 **Repo setup**

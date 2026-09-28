@@ -26,6 +26,18 @@ export const MAX_AGE_DAYS = 7;
 
 const RETENTION_TIMEOUT_MS = 30_000;
 
+/**
+ * `find -printf` format for a listing: epoch mtime, a space, the basename, a
+ * semicolon.
+ *
+ * Semicolon-separated rather than newline-separated because the transport
+ * refuses control characters in arguments, so `\n` in a `-printf` format cannot
+ * be sent at all. A directory whose name contains a semicolon just splits into
+ * records that fail `isSnapshotId` and are dropped, which is already what
+ * happens to any name Dwara did not create.
+ */
+const LISTING = '%T@ %f;';
+
 /** One snapshot directory on a host, newest first when listed. */
 export interface StoredSnapshot {
   readonly id: string;
@@ -63,13 +75,13 @@ export async function listSnapshots(ctx: Ctx): Promise<readonly StoredSnapshot[]
       '-type',
       'd',
       '-printf',
-      '%T@ %f\n',
+      LISTING,
     ]),
   );
 
   const found: StoredSnapshot[] = [];
-  for (const line of result.stdout.split('\n')) {
-    const match = /^(\d+(?:\.\d+)?) (.+)$/.exec(line);
+  for (const record of result.stdout.split(';')) {
+    const match = /^(\d+(?:\.\d+)?) (.+)$/.exec(record);
     const id = match?.[2];
     if (id === undefined || !isSnapshotId(id)) continue;
     found.push({ id, modifiedAt: Number(match?.[1]) });
