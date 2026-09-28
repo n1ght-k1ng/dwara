@@ -22,7 +22,7 @@ function containersOf(result: DockerPs): readonly Container[] {
 
 describe('docker_ps', () => {
   it('parses running containers', () => {
-    const containers = containersOf(dockerPs.parse(asResults(['healthy/docker_ps.running'])));
+    const containers = containersOf(dockerPs.parse(asResults(['healthy/docker_ps.json'])));
 
     expect(containers).toHaveLength(1);
     expect(containers[0]).toMatchObject({
@@ -35,7 +35,7 @@ describe('docker_ps', () => {
   });
 
   it('strips the quotes docker puts around the command', () => {
-    const containers = containersOf(dockerPs.parse(asResults(['healthy/docker_ps.running'])));
+    const containers = containersOf(dockerPs.parse(asResults(['healthy/docker_ps.json'])));
     expect(containers[0]?.command.startsWith('"')).toBe(false);
   });
 
@@ -47,9 +47,34 @@ describe('docker_ps', () => {
     expect(result.assessment).toContain('between restarts');
   });
 
+  it('never puts a tab in an argument, which the transport would refuse', () => {
+    // The tab-delimited --format template made this tool impossible to call:
+    // the transport rejects control characters in arguments, by design.
+    for (const arg of dockerPs.build({ host: 'h', all: true })[0]?.argv ?? []) {
+      expect(arg).not.toContain('\t');
+    }
+    expect(dockerPs.build({ host: 'h', all: true })[0]?.argv).toContain('{{json .}}');
+  });
+
+  it("uses docker's own state word rather than inferring from status text", () => {
+    const containers = containersOf(dockerPs.parse(asResults(['healthy/docker_ps.json'])));
+    expect(containers[0]?.state).toBe('running');
+  });
+
   it('reads an exit code out of the status text', () => {
     const result = dockerPs.parse([
-      asResult('abc\timage\t"cmd"\t2026-09-28\tExited (137) 2 minutes ago\t\tlab-app\n'),
+      asResult(
+        JSON.stringify({
+          ID: 'abc',
+          Image: 'image',
+          Command: '"cmd"',
+          CreatedAt: '2026-09-28',
+          Status: 'Exited (137) 2 minutes ago',
+          State: 'exited',
+          Ports: '',
+          Names: 'lab-app',
+        }),
+      ),
     ]);
     expect(containersOf(result)[0]).toMatchObject({ exitCode: 137, running: false });
     expect(result.assessment).toContain('not running');
@@ -57,14 +82,23 @@ describe('docker_ps', () => {
 
   it('flags a container that started seconds ago', () => {
     const result = dockerPs.parse([
-      asResult('abc\timage\t"cmd"\t2026-09-28\tUp 1 second\t\tlab-app\n'),
+      asResult(
+        JSON.stringify({ ID: 'abc', Status: 'Up 1 second', State: 'running', Names: 'lab-app' }),
+      ),
     ]);
     expect(result.assessment).toContain('keeps restarting');
   });
 
   it('flags one that is restarting right now', () => {
     const result = dockerPs.parse([
-      asResult('abc\timage\t"cmd"\t2026-09-28\tRestarting (1) 3 seconds ago\t\tlab-app\n'),
+      asResult(
+        JSON.stringify({
+          ID: 'abc',
+          Status: 'Restarting (1) 3 seconds ago',
+          State: 'restarting',
+          Names: 'lab-app',
+        }),
+      ),
     ]);
     expect(result.assessment).toContain('restarting now');
   });

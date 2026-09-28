@@ -85,13 +85,25 @@ function isLocal(address: string): boolean {
   );
 }
 
-function parseRow(line: string): OpenPort | undefined {
-  // `tcp LISTEN 0 511 0.0.0.0:443 0.0.0.0:* users:(("nginx",pid=95,fd=8),...)`
-  const parts = line.trim().split(/\s+/);
-  if (parts.length < 5) return undefined;
+/** Netid values ss prints when more than one protocol is in play. */
+const NETID = /^(?:tcp|udp|raw|unix|p_raw|p_dgr)$/;
 
-  const [protocol, state, , , local] = parts;
-  if (local === undefined) return undefined;
+function parseRow(line: string): OpenPort | undefined {
+  const parts = line.trim().split(/\s+/);
+  if (parts.length < 4) return undefined;
+
+  // ss prints the Netid column only when the protocol is ambiguous. `-tulnp`
+  // gives `tcp LISTEN 0 511 0.0.0.0:443 ...`; `-tlnp` gives
+  // `LISTEN 0 511 0.0.0.0:443 ...` with no protocol at all. Assuming the column
+  // is always there shifted every field by one and produced ports with no
+  // number -- and it went unnoticed because the fixture came from -tulnp while
+  // the tool's default is -tlnp.
+  const hasNetid = NETID.test(parts[0] ?? '');
+  const protocol = hasNetid ? parts[0]! : 'tcp';
+  const state = parts[hasNetid ? 1 : 0];
+  const local = parts[hasNetid ? 4 : 3];
+
+  if (local === undefined || state === undefined) return undefined;
 
   // Split on the last colon: an IPv6 address contains colons of its own.
   const separator = local.lastIndexOf(':');
@@ -99,8 +111,8 @@ function parseRow(line: string): OpenPort | undefined {
   const port = separator > 0 ? toNumber(local.slice(separator + 1)) : undefined;
 
   return {
-    protocol: protocol ?? '',
-    state: state ?? '',
+    protocol,
+    state,
     address,
     port,
     exposed: !isLocal(address),

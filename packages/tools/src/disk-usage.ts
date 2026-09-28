@@ -5,7 +5,7 @@ import {
   at,
   columns,
   hostField,
-  tabRows,
+  jsonLines,
   toNumber,
   unavailable,
   type Unavailable,
@@ -95,14 +95,10 @@ export const diskUsage: ToolDef<Input, DiskUsage> = {
     ];
 
     if (params.includeDocker) {
+      // `{{json .}}` rather than a tab-delimited template: a tab is a control
+      // character and the transport refuses those in arguments.
       commands.push({
-        argv: [
-          'docker',
-          'system',
-          'df',
-          '--format',
-          '{{.Type}}\t{{.TotalCount}}\t{{.Active}}\t{{.Size}}\t{{.Reclaimable}}',
-        ],
+        argv: ['docker', 'system', 'df', '--format', '{{json .}}'],
         timeoutMs: READ_TIMEOUT_MS,
       });
     }
@@ -127,12 +123,12 @@ export const diskUsage: ToolDef<Input, DiskUsage> = {
       dockerRaw === undefined
         ? undefined
         : (unavailable(dockerRaw) ??
-          tabRows(dockerRaw.stdout).map(([type, total, active, size, reclaimable]) => ({
-            type: type ?? '',
-            total: toNumber(total),
-            active: toNumber(active),
-            size: size ?? '',
-            reclaimable: reclaimable ?? '',
+          jsonLines(dockerRaw.stdout).map((entry) => ({
+            type: typeof entry['Type'] === 'string' ? entry['Type'] : '',
+            total: toNumber(String(entry['TotalCount'] ?? '')),
+            active: toNumber(String(entry['Active'] ?? '')),
+            size: typeof entry['Size'] === 'string' ? entry['Size'] : '',
+            reclaimable: typeof entry['Reclaimable'] === 'string' ? entry['Reclaimable'] : '',
           })));
 
     return {

@@ -264,7 +264,11 @@ describe('disk_usage', () => {
 
   it('parses docker usage rows', () => {
     const result = diskUsage.parse(
-      asResults(['healthy/disk_usage.df', 'healthy/disk_usage.du', 'healthy/disk_usage.docker']),
+      asResults([
+        'healthy/disk_usage.df',
+        'healthy/disk_usage.du',
+        'healthy/disk_usage.docker-json',
+      ]),
     );
 
     expect(Array.isArray(result.docker)).toBe(true);
@@ -297,6 +301,22 @@ describe('disk_usage', () => {
 });
 
 describe('open_ports', () => {
+  it('parses the default -tlnp shape, which has no protocol column', () => {
+    // ss omits Netid when only one protocol is requested. The tool's default is
+    // -tlnp, so this is the shape that actually matters; assuming the column was
+    // always present shifted every field and produced ports with no number.
+    const result = openPorts.parse(asResults(['healthy/open_ports.ss-tcp-only']));
+    const https = result.ports.find((port) => port.port === 443);
+
+    expect(https).toMatchObject({ protocol: 'tcp', state: 'LISTEN', address: '0.0.0.0' });
+    expect(result.ports.every((port) => port.port !== undefined)).toBe(true);
+  });
+
+  it('builds the -tlnp form by default', () => {
+    expect(openPorts.build({ host: 'h', listeningOnly: true })[0]?.argv).toContain('-tlnp');
+    expect(openPorts.build({ host: 'h', listeningOnly: false })[0]?.argv).toContain('-tulnp');
+  });
+
   it('parses listening sockets with their processes', () => {
     const result = openPorts.parse(asResults(['healthy/open_ports.ss']));
     const https = result.ports.find((port) => port.port === 443);

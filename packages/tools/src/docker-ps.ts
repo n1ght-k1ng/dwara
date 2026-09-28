@@ -4,7 +4,7 @@ import {
   READ_TIMEOUT_MS,
   at,
   hostField,
-  tabRows,
+  jsonLines,
   unavailable,
   type Unavailable,
 } from './common.js';
@@ -31,10 +31,13 @@ export interface Container {
   readonly createdAt: string;
   readonly status: string;
   readonly ports: string;
-  /** Read from the status text, which is where Docker puts it. */
+  /** Docker's own state word: running, exited, restarting, created, paused. */
+  readonly state: string;
   readonly running: boolean;
-  /** Set when the status says the container exited, with the code. */
+  /** Set when the status text carries one, e.g. "Exited (137)". */
   readonly exitCode?: number;
+  /** Present only when the image defines a health check. */
+  readonly health?: string;
 }
 
 export interface DockerPs {
@@ -74,14 +77,12 @@ export const dockerPs: ToolDef<Input, DockerPs> = {
     {
       // --no-trunc keeps full ids, so an id from here can be passed to
       // container_inspect without the caller guessing at the truncation.
-      argv: [
-        'docker',
-        'ps',
-        ...(params.all ? ['-a'] : []),
-        '--no-trunc',
-        '--format',
-        '{{.ID}}\t{{.Image}}\t{{.Command}}\t{{.CreatedAt}}\t{{.Status}}\t{{.Ports}}\t{{.Names}}',
-      ],
+      // `{{json .}}`, not a tab-delimited template. A tab in an argument is a
+      // control character, which the transport refuses outright -- so the
+      // delimited form made this tool impossible to call. JSON needs no
+      // delimiter, and carries Docker's own State and HealthStatus rather than
+      // leaving them to be inferred from the status text.
+      argv: ['docker', 'ps', ...(params.all ? ['-a'] : []), '--no-trunc', '--format', '{{json .}}'],
       timeoutMs: READ_TIMEOUT_MS,
     },
   ],
@@ -92,28 +93,34 @@ export const dockerPs: ToolDef<Input, DockerPs> = {
     if (missing)
       return { containers: missing, assessment: `docker is not usable here: ${missing.reason}` };
 
-    const containers = tabRows(raw.stdout).map(
-      ([id, image, command, createdAt, status, ports, name]) => {
-        const statusText = status ?? '';
-        const exited = /^Exited \((\d+)\)/.exec(statusText);
+    const containers: Container[] = jsonLines(raw.stdout).map((entry) => {
+      const statusText = str(entry['Status']);
+      const exited = /Exited \((\d+)\)/.exec(statusText);
+      const state = str(entry['State']);
+      const health = str(entry['HealthStatus']);
 
-        return {
-          id: id ?? '',
-          name: name ?? '',
-          image: image ?? '',
-          command: (command ?? '').replace(/^"|"$/g, ''),
-          createdAt: createdAt ?? '',
-          status: statusText,
-          ports: ports ?? '',
-          running: statusText.startsWith('Up'),
-          ...(exited ? { exitCode: Number(exited[1]) } : {}),
-        };
-      },
-    );
+      return {
+        id: str(entry['ID']),
+        name: str(entry['Names']),
+        image: str(entry['Image']),
+        command: str(entry['Command']).replace(/^"|"$/g, ''),
+        createdAt: str(entry['CreatedAt']),
+        status: statusText,
+        ports: str(entry['Ports']),
+        state,
+        running: state === 'running' || statusText.startsWith('Up'),
+        ...(exited ? { exitCode: Number(exited[1]) } : {}),
+        ...(health === '' ? {} : { health }),
+      };
+    });
 
     return { containers, assessment: assess(containers) };
   },
 };
+
+function str(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
 
 function assess(containers: readonly Container[]): string {
   if (containers.length === 0) {
@@ -123,7 +130,10 @@ function assess(containers: readonly Container[]): string {
     return 'no containers at all; if one is expected it may be between restarts, so call again';
   }
 
-  const restarting = containers.filter((c) => /^Restarting/.test(c.status));
+  const unhealthy = containers.filter((c) => c.health === 'unhealthy');
+  const restarting = containers.filter(
+    (c) => c.state === 'restarting' || /^Restarting/.test(c.status),
+  );
   const down = containers.filter((c) => !c.running);
   const young = containers.filter((c) =>
     /^Up (?:Less than a second|\d+ seconds?)\b/.test(c.status),
@@ -134,5 +144,8 @@ function assess(containers: readonly Container[]): string {
     return `${young.map((c) => c.name).join(', ')} started seconds ago, which may mean it keeps restarting`;
   }
   if (down.length > 0) return `${down.map((c) => c.name).join(', ')} is not running`;
+  if (unhealthy.length > 0) {
+    return `${unhealthy.map((c) => c.name).join(', ')} is running but its health check is failing`;
+  }
   return `${containers.length} container(s), all running`;
 }

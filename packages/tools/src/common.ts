@@ -41,6 +41,28 @@ export function tabRows(text: string): string[][] {
   return lines(text).map((line) => line.split('\t'));
 }
 
+/**
+ * One JSON object per line, as `--format '{{json .}}'` produces.
+ *
+ * Preferred over a tab-delimited template: a tab is a control character and the
+ * transport refuses those in arguments, so the delimited form cannot be sent at
+ * all. A line that will not parse is skipped rather than failing the whole read.
+ */
+export function jsonLines(text: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  for (const line of lines(text)) {
+    try {
+      const parsed: unknown = JSON.parse(line);
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        out.push(parsed as Record<string, unknown>);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
 /** Whitespace-separated columns, as `df` and `ss` produce. */
 export function columns(text: string, limit?: number): string[][] {
   return lines(text).map((line) =>

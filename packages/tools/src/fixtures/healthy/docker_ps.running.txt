@@ -1,1 +1,0 @@
-f2e8184bb59c3d4e72e57a1055ce818f9faaae9f3605823734befbd9fb76cb2b	dwara-lab-app:dev	"docker-entrypoint.sh node dist/main.js"	2026-09-28 05:08:12 +0000 UTC	Up About a minute		lab-app

@@ -32,5 +32,11 @@ Cmnd_Alias DWARA_INSPECT = /usr/bin/ss *,      \
 # way around it.
 Cmnd_Alias DWARA_AUDIT   = /usr/sbin/sshd -T
 
-dwara ALL=(root) NOPASSWD: DWARA_SYSTEMD, DWARA_LOGS, DWARA_INSPECT, DWARA_AUDIT
+# read_config. Some service configuration is mode 0640 and unreadable without
+# root -- redis.conf is root:redis, for one -- so the read needs sudo. The rule
+# is written to match exactly the command read_config builds, including the
+# refusal to follow a symlink, rather than granting `find` or `cat` generally.
+Cmnd_Alias DWARA_READCONF = /usr/bin/find /etc/* -maxdepth 0 -type f ! -type l -exec cat {} +
+
+dwara ALL=(root) NOPASSWD: DWARA_SYSTEMD, DWARA_LOGS, DWARA_INSPECT, DWARA_AUDIT, DWARA_READCONF
 Defaults:dwara !requiretty
