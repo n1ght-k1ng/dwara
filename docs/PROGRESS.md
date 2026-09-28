@@ -34,6 +34,33 @@ backstop. `Ctx` gained the host's `httpChecks`, translated out of policy; `Snaps
 gained the `hashes` that make a restore provable; five mutation error codes added.
 348 unit tests.
 
+**Task 2 — snapshot manager (2026-09-28).** `feat(core)`.
+
+`createSnapshot` / `restoreSnapshot` / retention, under
+`/var/lib/dwara/snapshots/<id>/`. Two properties do the work:
+
+- **A snapshot proves itself.** After `cp --preserve=all --parents`, the copies are
+  hashed and compared against the originals; a mismatch throws `SNAPSHOT_FAILED` and
+  `meta.json` is never written, so a directory holding one is a snapshot that
+  completed. A snapshot that silently copied nothing is worse than none, because the
+  pipeline would then change a host believing it could undo it.
+- **A restore is checked, not assumed.** `SnapshotRef.hashes` is captured up front and
+  re-checked after the restore, so "rollback restores exact file hashes" is testable
+  rather than asserted. A `cp` that exits zero and writes different bytes — a full disk
+  truncating the write — is still a failed restore.
+
+The deny-list moved from `@dwara/tools` to `@dwara/core`: it governs every path that
+reaches a command, not only ones a read tool opens, and a snapshot leaves a root-owned
+copy behind. `packages/tools/src/paths.ts` re-exports it and keeps the read allow-lists.
+
+Output shapes were captured from a lab host before the parsers were written, per the
+Phase 2 lesson: `systemctl show` returns properties **out of the requested order** (a
+real host answers `NRestarts` first), so unit blocks are keyed by `Id`; `stat` **exits 1
+when any path is missing but still prints the ones that exist**, so presence is read
+from stdout, not the exit code.
+
+377 unit tests.
+
 ## Done
 
 **Repo setup**

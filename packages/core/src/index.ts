@@ -45,6 +45,35 @@ export { shannonEntropy, looksLikeSecret, findEntropySecrets } from './redact/en
 export { RULES as REDACTION_RULES } from './redact/patterns.js';
 export type { RedactionRule } from './redact/patterns.js';
 
+export {
+  DENIED_PATHS,
+  globToRegExp,
+  lexicalPathProblem,
+  matchesGlob,
+  normalisePath,
+  pathIsDenied,
+} from './paths.js';
+
+export {
+  SNAPSHOT_ROOT,
+  copyOf,
+  createSnapshot,
+  guardSnapshotPath,
+  isSnapshotId,
+  newSnapshotId,
+  restoreSnapshot,
+  snapshotDir,
+} from './snapshot/manager.js';
+export type { RestoreResult } from './snapshot/manager.js';
+export {
+  KEEP_PER_HOST,
+  MAX_AGE_DAYS,
+  listSnapshots,
+  pruneSnapshots,
+  removeSnapshot,
+} from './snapshot/retention.js';
+export type { PruneResult, RetentionOptions, StoredSnapshot } from './snapshot/retention.js';
+
 export { wrap, findSuspicions } from './envelope.js';
 export type { Envelope, Suspicion, SuspicionKind, WrapOptions } from './envelope.js';
 
