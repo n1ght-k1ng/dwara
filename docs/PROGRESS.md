@@ -97,6 +97,33 @@ a host without it.
 
 378 unit tests, 53 integration.
 
+**Task 3 — verifier (2026-09-28).** `feat(core)`.
+
+Four composable checks — `serviceActiveAndStable`, `containerRunningAndHealthy`,
+`httpResponds`, `validatorCommand` — and a runner that retries with backoff to a
+deadline. The runner does two things that pull against each other: **retry**, because a
+service that has just been restarted deserves a moment, and **persist**, because a
+check with `stableForMs` must hold *continuously*, and one failure resets the clock.
+That is the crash-loop catcher: a unit dying and being resurrected reports `active` at
+every individual poll, and only a climbing `NRestarts` gives it away. The integration
+test induces a real one on the host with `Restart=always`, rather than simulating it.
+
+**Fixed the health-check URL.** The lab policy said `https://127.0.0.1:8443/health`, but
+8443 is the port compose publishes to the developer machine — nginx inside `lab-api`
+listens on 443, and checks run on the host. A test now reads the committed policy and
+asserts the fix, so it cannot silently regress.
+
+**A sudoers rule that looked like a constraint and was none.** Task 5 added a
+`docker image prune -f` grant without `-a`, and an abuse check appeared to confirm
+`prune -a` was refused. It was not: the `dwara` user is in the `docker` group, so every
+docker command already runs with the daemon's full authority, and none of the Phase 2
+docker tools use sudo at all. The abuse check had tested the sudo path, which is not the
+path the tools take — the Phase 2 `open_ports` lesson, a third time. The alias is
+removed, with a comment saying why, and the `-a` restriction lives where it can actually
+hold: in the tool.
+
+404 unit tests, 64 integration.
+
 ## Done
 
 **Repo setup**

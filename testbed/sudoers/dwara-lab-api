@@ -6,15 +6,13 @@ Cmnd_Alias DWARA_NGINX = /usr/sbin/nginx -t,     \
 
 dwara ALL=(root) NOPASSWD: DWARA_NGINX
 
-# restart_container, prune_images, and the verifier's container health check.
-# `docker image prune` is granted without -a: dangling layers only, never every
-# image not currently in use by a container.
-Cmnd_Alias DWARA_DOCKER = /usr/bin/docker restart *,      \
-                          /usr/bin/docker start *,        \
-                          /usr/bin/docker stop *,         \
-                          /usr/bin/docker inspect *,      \
-                          /usr/bin/docker images *,       \
-                          /usr/bin/docker image prune -f, \
-                          /usr/bin/docker image prune -f --filter *
-
-dwara ALL=(root) NOPASSWD: DWARA_DOCKER
+# No docker rules here, deliberately. The `dwara` user is in the `docker` group,
+# so every docker command already runs with the daemon's full authority and none
+# of the Phase 2 docker tools use sudo at all. A sudoers rule for `docker image
+# prune` would look like a constraint and be none: the same command succeeds
+# without sudo. Membership of the docker group is root-equivalent, and that is a
+# property of the lab's shape rather than something this file can fix.
+#
+# So the limits on what Dwara does with docker live in Dwara's code -- the tool
+# never builds `prune -a`, and the registry refuses a mutating tool that cannot
+# roll back -- not here.

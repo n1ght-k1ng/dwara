@@ -74,6 +74,18 @@ export {
 } from './snapshot/retention.js';
 export type { PruneResult, RetentionOptions, StoredSnapshot } from './snapshot/retention.js';
 
+export {
+  DEFAULT_STABLE_MS,
+  containerRunningAndHealthy,
+  httpResponds,
+  policyHttpChecks,
+  serviceActiveAndStable,
+  validatorCommand,
+} from './verify/checks.js';
+export type { Check, CheckOutcome } from './verify/checks.js';
+export { DEFAULT_VERIFY_TIMEOUT_MS, runChecks, summariseVerify } from './verify/run.js';
+export type { VerifyOptions } from './verify/run.js';
+
 export { wrap, findSuspicions } from './envelope.js';
 export type { Envelope, Suspicion, SuspicionKind, WrapOptions } from './envelope.js';
 

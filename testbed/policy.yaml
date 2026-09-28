@@ -19,8 +19,12 @@ hosts:
   - match: 'lab-api'
     tags: [production]
     require_approval: [reversible, config]
+    # Checked from lab-api itself, where nginx listens on 443. 8443 is the port
+    # compose publishes to the developer machine, and using it here was wrong:
+    # the host cannot reach it. Same shape as the Phase 2 open_ports bug -- the
+    # value under test was not the value the code would use.
     health_checks:
-      - http: 'https://127.0.0.1:8443/health'
+      - http: 'https://127.0.0.1/health'
         expect_status: 200
 
   - match: 'lab-db'
