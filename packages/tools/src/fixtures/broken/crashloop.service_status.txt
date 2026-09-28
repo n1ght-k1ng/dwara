@@ -1,0 +1,10 @@
+MainPID=1919
+Result=success
+NRestarts=4
+ExecMainStartTimestamp=Mon 2026-09-28 05:10:28 UTC
+Id=dwara-app.service
+Description=Dwara lab API (dummy NestJS app)
+LoadState=loaded
+ActiveState=active
+SubState=running
+UnitFileState=enabled

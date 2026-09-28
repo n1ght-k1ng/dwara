@@ -25,5 +25,12 @@ Cmnd_Alias DWARA_INSPECT = /usr/bin/ss *,      \
                            /usr/bin/stat *,    \
                            /usr/bin/sha256sum *
 
-dwara ALL=(root) NOPASSWD: DWARA_SYSTEMD, DWARA_LOGS, DWARA_INSPECT
+# Read-only audit of the effective sshd configuration. `sshd -T` needs root to
+# read the host keys it validates, and is the kind of read-only check a real ops
+# sudoers grants. Reading /etc/sudoers.d itself is deliberately NOT granted:
+# read_config's deny-list refuses those paths, and security_audit must not be a
+# way around it.
+Cmnd_Alias DWARA_AUDIT   = /usr/sbin/sshd -T
+
+dwara ALL=(root) NOPASSWD: DWARA_SYSTEMD, DWARA_LOGS, DWARA_INSPECT, DWARA_AUDIT
 Defaults:dwara !requiretty

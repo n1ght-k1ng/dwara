@@ -1,0 +1,10 @@
+Filesystem         1-blocks        Used    Available Capacity Mounted on
+overlay        489634406400 67922227200 396764934144      15% /
+tmpfs              67108864           0     67108864       0% /dev
+shm                67108864           0     67108864       0% /dev/shm
+tmpfs            3995152384      176128   3994976256       1% /run
+tmpfs            3995152384           0   3995152384       0% /tmp
+tmpfs            3995152384           0   3995152384       0% /run/lock
+tmpfs             134217728    16789504    117428224      13% /var/log
+/dev/vda1      489634406400 67922227200 396764934144      15% /etc/hosts
+tmpfs             799027200        4096    799023104       1% /run/user/1000

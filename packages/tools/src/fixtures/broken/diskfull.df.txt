@@ -1,0 +1,2 @@
+Filesystem      1-blocks      Used Available Capacity Mounted on
+tmpfs          134217728 134217728         0     100% /var/log

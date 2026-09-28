@@ -1,0 +1,5 @@
+16777216	/var/log/journal
+8192	/var/log/nginx
+0	/var/log/private
+117428224	/var/log/lab-api
+134217728	/var/log

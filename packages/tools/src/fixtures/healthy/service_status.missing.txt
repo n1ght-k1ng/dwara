@@ -1,0 +1,10 @@
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStartTimestamp=
+Id=nosuch.service
+Description=nosuch.service
+LoadState=not-found
+ActiveState=inactive
+SubState=dead
+UnitFileState=

@@ -1,0 +1,15 @@
+2026-09-28T05:09:59+00:00 lab-api sudo[1157]:    dwara : PWD=/home/dwara ; USER=root ; COMMAND=/usr/bin/journalctl -u nginx.service -n 20 --no-pager --output=short-iso
+2026-09-28T05:09:59+00:00 lab-api sudo[1157]: pam_unix(sudo:session): session opened for user root(uid=0) by dwara(uid=1000)
+2026-09-28T05:09:59+00:00 lab-api sudo[1157]: pam_unix(sudo:session): session closed for user root
+2026-09-28T05:09:59+00:00 lab-api sshd[1156]: Received disconnect from 172.22.0.1 port 55702:11: disconnected by user
+2026-09-28T05:09:59+00:00 lab-api sshd[1156]: Disconnected from user dwara 172.22.0.1 port 55702
+2026-09-28T05:09:59+00:00 lab-api sshd[1145]: pam_unix(sshd:session): session closed for user dwara
+2026-09-28T05:09:59+00:00 lab-api systemd[1]: session-78.scope: Deactivated successfully.
+2026-09-28T05:09:59+00:00 lab-api systemd-logind[70]: Session 78 logged out. Waiting for processes to exit.
+2026-09-28T05:09:59+00:00 lab-api systemd-logind[70]: Removed session 78.
+2026-09-28T05:09:59+00:00 lab-api sshd[1159]: Accepted publickey for dwara from 172.22.0.1 port 55714 ssh2: ED25519 SHA256:6wYYfxgkzQOYwXbEpR2eBJggJ9MR3kup6g76MC8cFjw
+2026-09-28T05:09:59+00:00 lab-api sshd[1159]: pam_unix(sshd:session): session opened for user dwara(uid=1000) by dwara(uid=0)
+2026-09-28T05:09:59+00:00 lab-api systemd-logind[70]: New session 79 of user dwara.
+2026-09-28T05:09:59+00:00 lab-api systemd[1]: Started session-79.scope - Session 79 of User dwara.
+2026-09-28T05:09:59+00:00 lab-api sudo[1171]:    dwara : PWD=/home/dwara ; USER=root ; COMMAND=/usr/bin/journalctl --since -30min -n 15 --no-pager --output=short-iso
+2026-09-28T05:09:59+00:00 lab-api sudo[1171]: pam_unix(sudo:session): session opened for user root(uid=0) by dwara(uid=1000)

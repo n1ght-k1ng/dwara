@@ -1,0 +1,4 @@
+udp UNCONN 0      0      127.0.0.11:55264 0.0.0.0:*                             
+tcp LISTEN 0      128       0.0.0.0:22    0.0.0.0:* users:(("sshd",pid=79,fd=3))
+tcp LISTEN 0      4096   127.0.0.11:41727 0.0.0.0:*                             
+tcp LISTEN 0      128          [::]:22       [::]:* users:(("sshd",pid=79,fd=4))

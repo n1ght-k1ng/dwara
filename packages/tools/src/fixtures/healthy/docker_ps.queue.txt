@@ -1,0 +1,1 @@
+5b4ac51c9762b7dd141d4c6794b5add27698edeb8592aaa2a772286284056328	apache/kafka:3.9.0	"/__cacert_entrypoint.sh /etc/kafka/docker/run"	2026-09-28 05:08:12 +0000 UTC	Up About a minute		lab-kafka

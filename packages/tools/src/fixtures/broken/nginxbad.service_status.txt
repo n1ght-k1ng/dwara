@@ -1,0 +1,10 @@
+MainPID=81
+Result=success
+NRestarts=0
+ExecMainStartTimestamp=Mon 2026-09-28 05:13:44 UTC
+Id=nginx.service
+Description=A high performance web server and a reverse proxy server
+LoadState=loaded
+ActiveState=active
+SubState=running
+UnitFileState=enabled

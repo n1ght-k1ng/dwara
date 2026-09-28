@@ -1,0 +1,1 @@
+2026/09/28 05:14:37 [error] 569#569: *3 connect() failed (111: Connection refused) while connecting to upstream, client: 172.22.0.1, server: _, request: "GET /health HTTP/1.1", upstream: "http://127.0.0.1:3999/health", host: "127.0.0.1:8443"

@@ -1,0 +1,10 @@
+MainPID=0
+Result=success
+NRestarts=0
+ExecMainStartTimestamp=Mon 2026-09-28 05:08:03 UTC
+Id=redis-server.service
+Description=redis-server.service
+LoadState=masked
+ActiveState=inactive
+SubState=dead
+UnitFileState=masked

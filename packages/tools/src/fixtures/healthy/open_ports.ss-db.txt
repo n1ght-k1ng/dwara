@@ -1,0 +1,6 @@
+udp UNCONN 0      0      127.0.0.11:48172 0.0.0.0:*                                 
+tcp LISTEN 0      128       0.0.0.0:22    0.0.0.0:* users:(("sshd",pid=82,fd=3))    
+tcp LISTEN 0      200       0.0.0.0:5432  0.0.0.0:* users:(("postgres",pid=90,fd=6))
+tcp LISTEN 0      4096   127.0.0.11:46183 0.0.0.0:*                                 
+tcp LISTEN 0      128          [::]:22       [::]:* users:(("sshd",pid=82,fd=4))    
+tcp LISTEN 0      200          [::]:5432     [::]:* users:(("postgres",pid=90,fd=7))

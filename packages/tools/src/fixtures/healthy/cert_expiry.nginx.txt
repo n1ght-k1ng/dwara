@@ -1,0 +1,5 @@
+subject=CN = lab-api, O = Dwara Testbed
+issuer=CN = lab-api, O = Dwara Testbed
+notBefore=Sep 22 06:57:18 2026 GMT
+notAfter=Sep 22 06:57:18 2027 GMT
+sha256 Fingerprint=A0:0F:95:96:AD:49:E8:2F:36:38:58:59:78:72:0F:11:13:8B:25:EF:AC:1D:AA:66:D9:A1:0D:DA:8D:9E:E3:71

@@ -1,0 +1,10 @@
+MainPID=90
+Result=success
+NRestarts=0
+ExecMainStartTimestamp=Mon 2026-09-28 05:08:09 UTC
+Id=postgresql@16-main.service
+Description=PostgreSQL Cluster 16-main
+LoadState=loaded
+ActiveState=active
+SubState=running
+UnitFileState=enabled

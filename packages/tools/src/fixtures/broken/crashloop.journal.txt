@@ -1,0 +1,25 @@
+2026-09-28T05:10:20+00:00 lab-api docker[1633]: [Nest] 1  - 09/28/2026, 5:10:20 AM   ERROR [bootstrap] database unreachable at boot: password authentication failed for user "labapp"
+2026-09-28T05:10:20+00:00 lab-api systemd[1]: dwara-app.service: Main process exited, code=exited, status=1/FAILURE
+2026-09-28T05:10:20+00:00 lab-api systemd[1]: dwara-app.service: Failed with result 'exit-code'.
+2026-09-28T05:10:22+00:00 lab-api systemd[1]: dwara-app.service: Scheduled restart job, restart counter is at 2.
+2026-09-28T05:10:22+00:00 lab-api systemd[1]: Starting dwara-app.service - Dwara lab API (dummy NestJS app)...
+2026-09-28T05:10:22+00:00 lab-api systemd[1]: Started dwara-app.service - Dwara lab API (dummy NestJS app).
+2026-09-28T05:10:23+00:00 lab-api docker[1726]: [Nest] 1  - 09/28/2026, 5:10:23 AM     LOG [NestFactory] Starting Nest application...
+2026-09-28T05:10:23+00:00 lab-api docker[1726]: [Nest] 1  - 09/28/2026, 5:10:23 AM     LOG [InstanceLoader] AppModule dependencies initialized +8ms
+2026-09-28T05:10:23+00:00 lab-api docker[1726]: [Nest] 1  - 09/28/2026, 5:10:23 AM   ERROR [bootstrap] database unreachable at boot: password authentication failed for user "labapp"
+2026-09-28T05:10:23+00:00 lab-api systemd[1]: dwara-app.service: Main process exited, code=exited, status=1/FAILURE
+2026-09-28T05:10:23+00:00 lab-api systemd[1]: dwara-app.service: Failed with result 'exit-code'.
+2026-09-28T05:10:25+00:00 lab-api systemd[1]: dwara-app.service: Scheduled restart job, restart counter is at 3.
+2026-09-28T05:10:25+00:00 lab-api systemd[1]: Starting dwara-app.service - Dwara lab API (dummy NestJS app)...
+2026-09-28T05:10:25+00:00 lab-api systemd[1]: Started dwara-app.service - Dwara lab API (dummy NestJS app).
+2026-09-28T05:10:25+00:00 lab-api docker[1825]: [Nest] 1  - 09/28/2026, 5:10:25 AM     LOG [NestFactory] Starting Nest application...
+2026-09-28T05:10:25+00:00 lab-api docker[1825]: [Nest] 1  - 09/28/2026, 5:10:25 AM     LOG [InstanceLoader] AppModule dependencies initialized +7ms
+2026-09-28T05:10:25+00:00 lab-api docker[1825]: [Nest] 1  - 09/28/2026, 5:10:25 AM   ERROR [bootstrap] database unreachable at boot: password authentication failed for user "labapp"
+2026-09-28T05:10:25+00:00 lab-api systemd[1]: dwara-app.service: Main process exited, code=exited, status=1/FAILURE
+2026-09-28T05:10:25+00:00 lab-api systemd[1]: dwara-app.service: Failed with result 'exit-code'.
+2026-09-28T05:10:27+00:00 lab-api systemd[1]: dwara-app.service: Scheduled restart job, restart counter is at 4.
+2026-09-28T05:10:28+00:00 lab-api systemd[1]: Starting dwara-app.service - Dwara lab API (dummy NestJS app)...
+2026-09-28T05:10:28+00:00 lab-api systemd[1]: Started dwara-app.service - Dwara lab API (dummy NestJS app).
+2026-09-28T05:10:28+00:00 lab-api docker[1919]: [Nest] 1  - 09/28/2026, 5:10:28 AM     LOG [NestFactory] Starting Nest application...
+2026-09-28T05:10:28+00:00 lab-api docker[1919]: [Nest] 1  - 09/28/2026, 5:10:28 AM     LOG [InstanceLoader] AppModule dependencies initialized +8ms
+2026-09-28T05:10:28+00:00 lab-api docker[1919]: [Nest] 1  - 09/28/2026, 5:10:28 AM   ERROR [bootstrap] database unreachable at boot: password authentication failed for user "labapp"
