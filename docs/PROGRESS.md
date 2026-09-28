@@ -4,8 +4,9 @@ Handoff notes between Claude Code sessions. Update after every task.
 
 ## Current phase
 
-Phase 1 — core: types, policy engine, SSH transport, doctor. **Complete.**
-Phase 0 complete before it. Exit criteria for both verified on 2026-09-22.
+Phase 2 — read-only tools, redactor, audit, MCP server. **Complete.** Phases 0
+and 1 complete before it. Exit criteria for all three verified; Phase 2 on
+2026-09-28.
 
 ## Done
 
@@ -68,7 +69,63 @@ Phase 0 complete before it. Exit criteria for both verified on 2026-09-22.
       hosts healthy, and flags a host whose sudoers file has been removed with the exact
       line to restore.
 
-## Two bugs the tests found, worth remembering
+**Phase 2: the agent-facing layer**
+- Redactor: pattern rules plus an entropy fallback, measured on a committed corpus —
+  **zero leaks on 109 positives, under 2% false positives on 106 negatives.**
+- Untrusted-data envelope that flags injection attempts without blocking them.
+- Hash-chained audit log at `.dwara/audit.jsonl`, with `verifyChain` detecting an
+  edit, a deletion, a reorder or a truncation by line number.
+- Session, registry and the execution pipeline (DESIGN §3, in order).
+- **Eleven read tools**, parsers tested against 48 captured fixtures.
+- MCP stdio server exposing them as `read_*`, plus `runbooks/` as resources.
+- 84 tools tests, 40 integration tests, 420 in total.
+
+## Phase 2 exit criteria
+
+- [x] **5 of 5 break scenarios root-caused** by Claude Code using only Dwara tools.
+      The criterion was ≥4. Transcripts and audit logs per scenario; every chain
+      verified. Scored below.
+- [x] No corpus secret appears in any tool output — enforced by the redactor corpus
+      test, and the pipeline redacts parsed output, error messages and audit inputs.
+- [x] Audit chain verifies after a full diagnosis session, on all six gate runs.
+
+### Gate results (2026-09-28, `claude -p`, Dwara tools only, no shell)
+
+| Scenario | Verdict | Root cause identified |
+|---|---|---|
+| `api-crash-loop` | pass | Postgres rejects the password for `labapp`, app exits at boot, systemd restarts it forever |
+| `nginx-bad-config` | pass | nginx proxies to `127.0.0.1:3999`, app listens on `3000`, every request refused |
+| `redis-down` | pass | `redis-server` stopped and masked on lab-cache, app gets ECONNREFUSED on 6379 |
+| `postgres-max-connections` | pass | connection slots exhausted; named the exact Postgres error and hedged correctly on *why* the limit changed |
+| `disk-full-logs` | **failed, then passed** | see below |
+
+`disk-full-logs` failed on the first run and the audit log said why: twenty tool
+calls on lab-api, and **not one of them reached `disk_usage`** on a scenario whose
+entire cause is a full filesystem. That was a design gap, not a model failure —
+`host_overview` is the orientation tool, it reported memory, and it said nothing
+about disk, so nothing pointed that way. After adding filesystem pressure to
+`host_overview`, `disk_usage` became the **third** call and the root cause came
+with byte-level evidence.
+
+## Bugs the exit gate found that every unit test had missed
+
+Worth keeping, because they are the argument for the gate existing at all:
+
+- **`docker_ps` could not be called.** Its `--format` template used tabs, and the
+  transport refuses control characters in arguments — two of our own decisions in
+  direct conflict. Now `{{json .}}`, which needs no delimiter and carries Docker's
+  own `State` and `HealthStatus`.
+- **`open_ports` returned every port with no number.** `ss` prints the Netid column
+  only when more than one protocol is requested, so `-tlnp` and `-tulnp` have
+  different shapes. The fixture came from `-tulnp` while the tool's default is
+  `-tlnp` — **the tested path was not the path the tool takes.**
+- **`read_config` had no sudoers rule.** `redis.conf` is `root:redis` mode 0640, so
+  the read genuinely needs root.
+- **`max_actions_per_session: 20`** (the DESIGN example value) is too low for a real
+  diagnosis. Raised to 60 in the lab policy. The limit itself behaved exactly as
+  specified: 20 executed, 4 refused, refusals not charged.
+
+## Two bugs the Phase 1 tests found, worth remembering
 
 - **shell-quote corrupts `!`.** Its `quote()` emits `\!` inside double quotes for
   interactive bash; a non-interactive shell passes the backslash through literally. Any
@@ -94,13 +151,33 @@ Phase 0 complete before it. Exit criteria for both verified on 2026-09-22.
 
 ## Next
 
-Phase 2 — read-only tools, redactor, audit log, MCP server. Kickoff prompt is in
-`docs/PLAN.md`. Build the redactor corpus before the redactor, and capture real command
-output from the testbed as parser fixtures rather than inventing them.
+Phase 3 — mutations: snapshots, verifier, reversible and config tools, rollback.
+Kickoff prompt is in `docs/PLAN.md`. Build the snapshot manager and verifier
+**before** any mutating tool, and no mutating tool counts as done without the full
+test matrix: success, verify-failure-triggers-rollback, timeout mid-action,
+rollback restores exact file hashes, idempotent re-run.
 
-The registry and execution pipeline sit on top of what Phase 1 built: `evaluate()` for the
-decision, `SshTransport` for execution, `DwaraError` for failures. Nothing in Phase 2
-should need to touch escaping or policy semantics again.
+Two things Phase 2 leaves for Phase 3 to resolve:
+
+- **Staged execution.** A tool's commands are built up front, so a later command
+  cannot depend on an earlier one's output. `read_config` works around it by
+  guarding lexically first and re-checking the resolved path afterwards, and says
+  so in its comments. Phase 3's verify step needs the real thing.
+- **Approval is a dead end today.** The pipeline stops at an approval requirement
+  and reports that no tool can grant one, which is correct but leaves `config_*`
+  tools unusable until Phase 4 builds the CLI flow.
+
+## Running the gate again
+
+```bash
+pnpm build && pnpm testbed:up
+# per scenario: reset, break, then claude -p with only Dwara tools
+claude -p "<prompt>" --mcp-config <config> --allowedTools mcp__dwara__read_* \
+  --disallowedTools Bash Read Write Edit Glob Grep WebFetch WebSearch Task
+```
+
+The harness used for the 2026-09-28 run lives in the session scratchpad rather than
+the repo; Phase 5 replaces it with the real benchmark runner under `evals/`.
 
 ## Open questions
 
@@ -108,7 +185,9 @@ should need to touch escaping or policy semantics again.
 - Model budget for the Phase 5 benchmark runs.
 - Whether integration tests should run in CI with the testbed, or stay local until
   Phase 5. CI runs unit tests only so far.
-- Session accounting: `evaluate()` reads `actionsUsed` and never changes it, so something
-  in Phase 2 has to own the counter and increment it only on executed actions.
+- ~~Session accounting~~ — resolved in Phase 2: `Session` owns the counter and charges
+  only actions that reached a host.
+- Whether `host_overview` should also carry a cheap check of the host's main service
+  ports. The gate suggests orientation tools earn their place by pointing somewhere.
 
 ## Dogfooding log (Phase 7)
