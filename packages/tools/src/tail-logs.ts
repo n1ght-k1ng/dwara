@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DwaraError, Risk, type ToolDef } from '@dwara/core';
+import { DwaraError, Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField, lines } from './common.js';
 import { DEFAULT_LOG_PATHS, guardPath } from './paths.js';
 
@@ -55,7 +55,7 @@ const SINCE =
  * `/var/log`. Without that, a tool whose whole job is "print the end of a file"
  * would be the easiest way to read `/etc/shadow`.
  */
-export const tailLogs: ToolDef<Input, TailedLogs> = {
+export const tailLogs: BuiltToolDef<Input, TailedLogs> = {
   name: 'tail_logs',
   risk: Risk.Read,
   description: [

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DwaraError, Risk, type ToolDef } from '@dwara/core';
+import { DwaraError, Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField } from './common.js';
 import { DEFAULT_CONFIG_PATHS, DENIED_PATHS, guardPath, resolvedPathIsDenied } from './paths.js';
 
@@ -41,7 +41,7 @@ export interface ConfigFile {
  * 3. A re-check of the path the host resolved, so a symlink higher up the tree is
  *    caught and the content withheld.
  */
-export const readConfig: ToolDef<Input, ConfigFile> = {
+export const readConfig: BuiltToolDef<Input, ConfigFile> = {
   name: 'read_config',
   risk: Risk.Read,
   description: [

@@ -79,12 +79,52 @@ export interface SnapshotSpec {
   readonly units?: readonly string[];
 }
 
+/** What a systemd unit looked like before a change, so it can be put back. */
+export interface UnitState {
+  readonly activeState: string;
+  readonly unitFileState: string;
+  /** `NRestarts`, or undefined when systemd did not report it. */
+  readonly restarts: number | undefined;
+}
+
 /** A snapshot that exists, referenced when rolling back. */
 export interface SnapshotRef {
   readonly id: string;
   readonly host: string;
   readonly createdAt: string;
   readonly paths: readonly string[];
+  /**
+   * Absolute path to the SHA-256 of its contents when the snapshot was taken.
+   *
+   * This is what makes a rollback checkable rather than merely attempted: after
+   * restoring, the files are hashed again and compared against these. A restore
+   * that reported success but put back different bytes is a failure, and
+   * without the hashes there is no way to notice.
+   */
+  readonly hashes: Readonly<Record<string, string>>;
+  /** Unit states captured alongside the files, keyed by unit name. */
+  readonly units?: Readonly<Record<string, UnitState>>;
+}
+
+/** What happened when a failed change was undone. */
+export interface RollbackOutcome {
+  readonly attempted: boolean;
+  readonly ok: boolean;
+  /** Plain enough for a human reading the result at 3am. */
+  readonly detail: string;
+}
+
+/**
+ * An HTTP postcondition, translated out of a host's policy rule.
+ *
+ * Checked **from the host itself**, not from the developer machine: that is
+ * what the service actually serves, and it needs no network path back to the
+ * laptop. The policy file's `health_checks` are translated into this shape at
+ * the pipeline boundary, so the verifier never reads YAML field names.
+ */
+export interface HttpCheck {
+  readonly url: string;
+  readonly expectStatus: number;
 }
 
 /** The outcome of checking postconditions after a change. */
@@ -104,6 +144,10 @@ export interface Ctx {
   readonly sessionId: string;
   /** Runs a command on the host through the policy-checked transport. */
   run(command: RemoteCommand): Promise<RawResult>;
+  /** HTTP postconditions for this host, from policy. Empty when none apply. */
+  readonly httpChecks: readonly HttpCheck[];
+  /** The snapshot taken before this action, for a tool that needs to read it. */
+  readonly snapshot?: SnapshotRef;
 }
 
 /**
@@ -119,7 +163,24 @@ export interface ToolDef<I, O> {
   readonly risk: Risk;
   /** Always includes `host`. */
   readonly input: z.ZodType<I>;
-  build(input: I): readonly RemoteCommand[];
+  /**
+   * The commands to run, when every one of them is known from the input alone.
+   *
+   * Stays pure, which is why a read tool's parser fixtures can test it with no
+   * host in sight. Exactly one of `build` or `apply` must be defined; the
+   * registry refuses a tool that defines both or neither.
+   */
+  build?(input: I): readonly RemoteCommand[];
+  /**
+   * Runs the commands itself, for the staged case where a later command depends
+   * on an earlier one's output — capturing a unit's state before restarting it,
+   * reading a file before writing it back.
+   *
+   * `ctx.run` is the same policy-checked transport the pipeline uses, so this is
+   * sequencing, not an escape hatch: the argv still comes from code in this
+   * repository and every element is still escaped individually.
+   */
+  apply?(input: I, ctx: Ctx): Promise<readonly RawResult[]>;
   parse(raw: readonly RawResult[]): O;
   /** Required for reversible and config tools. */
   snapshot?(input: I): SnapshotSpec;
@@ -130,6 +191,28 @@ export interface ToolDef<I, O> {
   /** Output cap for this tool, if it differs from the transport default. */
   readonly maxOutputBytes?: number;
 }
+
+/**
+ * A tool whose commands are all known from its input.
+ *
+ * Every read tool is one of these. Declaring it makes `build` required and
+ * `apply` impossible, so the "exactly one execution path" rule is a compile
+ * error rather than only a registration-time throw — and a parser test can call
+ * `build()` without first proving it exists.
+ */
+export type BuiltToolDef<I, O> = ToolDef<I, O> & {
+  build(input: I): readonly RemoteCommand[];
+  apply?: never;
+};
+
+/**
+ * A tool that sequences its own commands, because a later one depends on an
+ * earlier one's output. Mutating tools are generally these.
+ */
+export type StagedToolDef<I, O> = ToolDef<I, O> & {
+  apply(input: I, ctx: Ctx): Promise<readonly RawResult[]>;
+  build?: never;
+};
 
 /**
  * What the MCP layer returns.
@@ -147,5 +230,7 @@ export interface ToolResult<O> {
   readonly truncated?: boolean;
   readonly verify?: VerifyResult;
   readonly snapshot?: SnapshotRef;
+  /** Present when verification failed and the change was undone. */
+  readonly rollback?: RollbackOutcome;
   readonly durationMs: number;
 }

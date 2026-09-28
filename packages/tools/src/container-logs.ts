@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField, lines, unavailable } from './common.js';
 
 const input = z
@@ -31,7 +31,7 @@ export interface ContainerLogs {
  * stderr while its ordinary logging goes to stdout, and separating them here
  * would hide the line that explains the crash.
  */
-export const containerLogs: ToolDef<Input, ContainerLogs> = {
+export const containerLogs: BuiltToolDef<Input, ContainerLogs> = {
   name: 'container_logs',
   risk: Risk.Read,
   description: [

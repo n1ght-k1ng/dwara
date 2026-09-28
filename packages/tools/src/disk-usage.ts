@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import {
   READ_TIMEOUT_MS,
   at,
@@ -65,7 +65,7 @@ export interface DiskUsage {
  * Byte counts throughout, via `df -B1` and `du -B1`, because human-readable
  * units ("1.2G") are a parsing hazard and cannot be compared arithmetically.
  */
-export const diskUsage: ToolDef<Input, DiskUsage> = {
+export const diskUsage: BuiltToolDef<Input, DiskUsage> = {
   name: 'disk_usage',
   risk: Risk.Read,
   description: [

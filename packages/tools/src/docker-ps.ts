@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import {
   READ_TIMEOUT_MS,
   at,
@@ -52,7 +52,7 @@ export interface DockerPs {
  * that should be there and is not, and `docker ps` without `-a` hides exactly
  * that.
  */
-export const dockerPs: ToolDef<Input, DockerPs> = {
+export const dockerPs: BuiltToolDef<Input, DockerPs> = {
   name: 'docker_ps',
   risk: Risk.Read,
   description: [

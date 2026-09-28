@@ -3,14 +3,19 @@ export type { DwaraErrorCode, DwaraErrorDetails } from './errors.js';
 
 export { Risk, RISK_ORDER } from './types.js';
 export type {
+  BuiltToolDef,
   Ctx,
   Decision,
+  HttpCheck,
   RawResult,
   RemoteCommand,
+  RollbackOutcome,
   SnapshotRef,
   SnapshotSpec,
+  StagedToolDef,
   ToolDef,
   ToolResult,
+  UnitState,
   VerifyResult,
 } from './types.js';
 

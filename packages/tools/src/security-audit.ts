@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField, keyValues, lines, unavailable } from './common.js';
 
 const input = z.object({ host: hostField }).strict();
@@ -29,7 +29,7 @@ export interface SecurityAudit {
  * what it could not check as loudly as what it found — a report that silently
  * skips a check reads as a pass.
  */
-export const securityAudit: ToolDef<Input, SecurityAudit> = {
+export const securityAudit: BuiltToolDef<Input, SecurityAudit> = {
   name: 'security_audit',
   risk: Risk.Read,
   description: [

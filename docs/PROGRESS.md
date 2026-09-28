@@ -4,9 +4,35 @@ Handoff notes between Claude Code sessions. Update after every task.
 
 ## Current phase
 
-Phase 2 — read-only tools, redactor, audit, MCP server. **Complete.** Phases 0
-and 1 complete before it. Exit criteria for all three verified; Phase 2 on
-2026-09-28.
+Phase 3 — mutations: snapshots, verifier, reversible and config tools, rollback.
+**In progress.** Phases 0, 1 and 2 complete; exit criteria for all three verified.
+
+### Phase 3 log
+
+**Task 0 — pre-flight (2026-09-28).** Not a commit.
+
+- **Docker Desktop was pausing itself.** `UseResourceSaver: true` with
+  `AutoPauseTimeoutSeconds: 300` is the idle shutdown. Now off, with `AutoStart: true`
+  so it survives a reboot, and the VM raised from 7869 MiB to 12288 — five systemd
+  hosts plus Docker-in-Docker, Kafka and Postgres had 7.7 GB, and Phase 3 restarts
+  services constantly. Settings live in `~/.docker/desktop/settings-store.json`;
+  changing them restarts the daemon and takes the lab with it.
+- **Node 22 runs clean.** nvm had only 20.20.2, so 22 had never run here at all. Both
+  legs of the CI matrix now pass locally end to end: `format:check`, `lint`,
+  `typecheck`, `test` (337 at the time), `build`.
+- **CI itself is still unconfirmed.** `gh` is not installed and the repo is private, so
+  the Actions tab is not readable from this machine. The local matrix run is the same
+  job, so a red build would be environment-specific rather than code.
+
+**Task 1 — staged execution (2026-09-28).** `feat(core)`.
+
+Resolves the first of the two things Phase 2 left open. A tool now defines exactly one
+of `build` (pure, every command known from the input) or `apply` (sequences its own
+commands through `ctx.run`, so a later one can use an earlier one's output). Enforced
+in the type system by `BuiltToolDef` / `StagedToolDef` and at registration as a runtime
+backstop. `Ctx` gained the host's `httpChecks`, translated out of policy; `SnapshotRef`
+gained the `hashes` that make a restore provable; five mutation error codes added.
+348 unit tests.
 
 ## Done
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField, keyValues, toNumber } from './common.js';
 
 const serviceInput = z
@@ -50,7 +50,7 @@ const SHOW_PROPERTIES = [
  * at: a unit in a restart loop reports `active` at the instant you ask, because
  * it has just been started again.
  */
-export const serviceStatus: ToolDef<ServiceInput, ServiceStatus> = {
+export const serviceStatus: BuiltToolDef<ServiceInput, ServiceStatus> = {
   name: 'service_status',
   risk: Risk.Read,
   description: [

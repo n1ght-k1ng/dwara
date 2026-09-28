@@ -1,6 +1,6 @@
 import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField } from './common.js';
 
 const input = z
@@ -51,7 +51,7 @@ export interface CertExpiry {
  * `argv` a real argument vector rather than a shell string, and needs no
  * dependency.
  */
-export const certExpiry: ToolDef<Input, CertExpiry> = {
+export const certExpiry: BuiltToolDef<Input, CertExpiry> = {
   name: 'cert_expiry',
   risk: Risk.Read,
   description: [

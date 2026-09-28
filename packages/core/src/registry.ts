@@ -44,7 +44,10 @@ export interface RegisteredTool {
   readonly mutates: boolean;
 
   validate(args: unknown): ValidationResult;
-  build(input: unknown): readonly RemoteCommand[];
+  /** Undefined for a tool that sequences its own commands through `apply`. */
+  build(input: unknown): readonly RemoteCommand[] | undefined;
+  /** Undefined for a tool whose commands are all known from the input. */
+  apply(input: unknown, ctx: Ctx): Promise<readonly RawResult[]> | undefined;
   parse(raws: readonly RawResult[]): unknown;
   snapshot(input: unknown): SnapshotSpec | undefined;
   verify(input: unknown, ctx: Ctx): Promise<VerifyResult> | undefined;
@@ -90,7 +93,8 @@ function erase<I, O>(tool: ToolDef<I, O>): RegisteredTool {
     // Every caller reaches these through `validate` first, so the value really
     // is an I. The assertion is confined to this function rather than spread
     // across the registry and the pipeline.
-    build: (input) => tool.build(input as I),
+    build: (input) => tool.build?.(input as I),
+    apply: (input, ctx) => tool.apply?.(input as I, ctx),
     parse: (raws) => tool.parse(raws),
     snapshot: (input) => tool.snapshot?.(input as I),
     verify: (input, ctx) => tool.verify?.(input as I, ctx),
@@ -117,6 +121,22 @@ export class ToolRegistry {
   register<I, O>(tool: ToolDef<I, O>): this {
     if (this.byName.has(tool.name)) {
       throw new DwaraError('INTERNAL', `tool "${tool.name}" is already registered`);
+    }
+
+    // Exactly one execution path. `build` is the pure one, for commands known
+    // from the input alone; `apply` is the staged one, for a later command that
+    // depends on an earlier one's output. A tool defining both would have two
+    // answers to "what does this run?", and the plan a human approves has to be
+    // the thing that actually runs.
+    const paths = (['build', 'apply'] as const).filter((hook) => typeof tool[hook] === 'function');
+    if (paths.length !== 1) {
+      throw new DwaraError(
+        'INTERNAL',
+        paths.length === 0
+          ? `tool "${tool.name}" defines neither build nor apply; it must define exactly one`
+          : `tool "${tool.name}" defines both build and apply; it must define exactly one`,
+        { details: { tool: tool.name, defines: [...paths] } },
+      );
     }
 
     // CLAUDE.md rule 3: every mutating tool defines snapshot, verify and

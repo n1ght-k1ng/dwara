@@ -306,3 +306,27 @@ long Dwara waits, not how long the remote process runs; that is inherent to conn
 2026-09-22 — **`doctor` probes with the argv the tools actually use.** Reason: a correctly scoped sudoers
 grants verbs (`systemctl restart *`) and refuses the bare command, so a `<command> --version` probe fails on
 well-configured hosts and passes on ones that hand out blanket root.
+
+2026-09-28 — **Staged execution is an optional `apply(input, ctx)`, and a tool defines exactly one of
+`build` or `apply`.** Reason: Phase 2 built every command up front, so nothing could depend on an earlier
+command's output — `read_config` had to guard lexically first and re-check the resolved path afterwards to
+work around it, and verification cannot work that way at all. `Ctx.run` already existed and `verify()` already
+took a `Ctx`, so `apply` reuses one primitive rather than adding a second. `build` stays pure, which is what
+lets a read tool's parser fixtures exercise it with no host in sight. Both defined would mean two answers to
+"what does this run?", and under §9 the plan a human approves has to be the thing that actually runs; the
+`BuiltToolDef` and `StagedToolDef` aliases make that a compile error, with the registry check as the runtime
+backstop for callers that are not TypeScript.
+
+2026-09-28 — **A tool's `apply` is sequencing, not an escape hatch.** Reason: `ctx.run` is the same
+policy-checked transport the pipeline uses, the argv still comes from code in this repository, and every
+element is still escaped individually — so `CLAUDE.md` rules 1 and 2 are untouched. What `apply` changes is
+only who decides what runs next, and the policy decision was taken per tool and host before it was called.
+One action stays one charge against the session budget however many commands it needs.
+
+2026-09-28 — **Policy `health_checks` are translated into `HttpCheck` at the pipeline boundary, and run on
+the host.** Reason: the verifier should not read YAML field names, and a schema change should break at one
+translation site rather than everywhere a check is consumed. Running them on the host tests what the service
+actually serves and needs no network path back to the developer machine. This makes the lab policy's
+`https://127.0.0.1:8443/health` wrong — 8443 is the host-published port, and nginx inside `lab-api` listens
+on 443 — which is the same class of bug as Phase 2's `open_ports` fixture: the tested path was not the path
+the tool takes.

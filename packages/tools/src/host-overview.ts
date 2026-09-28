@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField, keyValues, lines, toNumber } from './common.js';
 
 const input = z.object({ host: hostField }).strict();
@@ -48,7 +48,7 @@ export interface HostOverview {
  * start here without knowing anything about the host. The failed-unit list is
  * the part that usually points at the next tool to call.
  */
-export const hostOverview: ToolDef<Input, HostOverview> = {
+export const hostOverview: BuiltToolDef<Input, HostOverview> = {
   name: 'host_overview',
   risk: Risk.Read,
   description: [

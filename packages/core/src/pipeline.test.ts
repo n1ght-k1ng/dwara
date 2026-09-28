@@ -10,7 +10,7 @@ import { parsePolicy } from './policy/load.js';
 import { ToolRegistry } from './registry.js';
 import { Session } from './session.js';
 import type { SshConfig } from './ssh/config.js';
-import { Risk, type RawResult, type ToolDef } from './types.js';
+import { Risk, type Ctx, type RawResult, type ToolDef } from './types.js';
 
 const POLICY = `
 version: 1
@@ -22,6 +22,30 @@ hosts:
   - match: "lab-*"
 limits:
   max_actions_per_session: 3
+  max_hosts_per_action: 1
+`;
+
+/**
+ * Two rules that tie on specificity — `lab-*` and `*-api` are both four literal
+ * characters — so `lab-api` matches both. Used to pin that every tied rule
+ * contributes its checks.
+ */
+const POLICY_WITH_CHECKS = `
+version: 1
+defaults:
+  allow: [read]
+  require_approval: [reversible, config]
+  deny: [destructive]
+hosts:
+  - match: "lab-*"
+    health_checks:
+      - http: "https://127.0.0.1/health"
+        expect_status: 200
+  - match: "*-api"
+    health_checks:
+      - http: "http://127.0.0.1:3000/ready"
+limits:
+  max_actions_per_session: 5
   max_hosts_per_action: 1
 `;
 
@@ -41,6 +65,27 @@ const echoTool: EchoTool = {
   build: (input) => [{ argv: ['systemctl', 'is-active', input.unit], timeoutMs: 5000 }],
   parse: (raws) => ({ unit: 'x', text: raws.map((raw) => raw.stdout).join('') }),
 };
+
+/**
+ * A tool whose second command depends on the first one's output — exactly what
+ * `build()` cannot express, and the reason `apply` exists.
+ */
+const stagedTool: EchoTool = {
+  name: 'staged_unit',
+  description: 'Test tool that sequences its own commands.',
+  risk: Risk.Read,
+  input: z.object({ host: z.string(), unit: z.string() }).strict(),
+  async apply(input, ctx) {
+    seenCtx = ctx;
+    const shown = await ctx.run({ argv: ['systemctl', 'show', input.unit], timeoutMs: 5000 });
+    // The argv here is not knowable until the first command has answered.
+    return [shown, await ctx.run({ argv: ['echo', shown.stdout.trim()], timeoutMs: 5000 })];
+  },
+  parse: (raws) => ({ unit: 'x', text: raws.map((item) => item.stdout.trim()).join('|') }),
+};
+
+/** The context the last staged tool ran with, for assertions about it. */
+let seenCtx: Ctx | undefined;
 
 function raw(over: Partial<RawResult> = {}): RawResult {
   return {
@@ -75,6 +120,7 @@ let dir: string;
 let audit: AuditLog;
 
 beforeEach(async () => {
+  seenCtx = undefined;
   dir = await mkdtemp(join(tmpdir(), 'dwara-pipeline-'));
   audit = new AuditLog({ path: join(dir, 'audit.jsonl') });
 });
@@ -423,6 +469,106 @@ describe('Pipeline auditing', () => {
   });
 });
 
+describe('Pipeline staged execution', () => {
+  it('runs a tool through apply, letting a later command use an earlier result', async () => {
+    const runner = fakeRunner([raw({ stdout: 'ActiveState=active\n' }), raw({ stdout: 'done\n' })]);
+    const result = await build(runner, { tools: [stagedTool] }).execute(
+      'staged_unit',
+      { host: 'lab-api', unit: 'nginx' },
+      new Session(),
+    );
+
+    expect(result.ok).toBe(true);
+    // The second argv carries the first command's output, which is the whole
+    // point: build() is handed only the input and could never have produced it.
+    expect(runner.calls.map((call) => call.argv)).toEqual([
+      ['systemctl', 'show', 'nginx'],
+      ['echo', 'ActiveState=active'],
+    ]);
+    expect(result.data?.data).toMatchObject({ text: 'ActiveState=active|done' });
+  });
+
+  it('routes through build when a tool defines no apply', async () => {
+    const runner = fakeRunner([raw()]);
+    await build(runner).execute('echo_unit', { host: 'lab-api', unit: 'nginx' }, new Session());
+
+    expect(runner.calls).toHaveLength(1);
+    expect(runner.calls[0]?.argv).toEqual(['systemctl', 'is-active', 'nginx']);
+  });
+
+  it('sends every staged command to the same host and transport', async () => {
+    const runner = fakeRunner([raw(), raw()]);
+    await build(runner, { tools: [stagedTool] }).execute(
+      'staged_unit',
+      { host: 'lab-db', unit: 'postgresql' },
+      new Session(),
+    );
+
+    expect(runner.calls.map((call) => call.host)).toEqual(['lab-db', 'lab-db']);
+  });
+
+  it('charges one action for a staged tool however many commands it runs', async () => {
+    const session = new Session();
+    await build(fakeRunner([raw(), raw()]), { tools: [stagedTool] }).execute(
+      'staged_unit',
+      { host: 'lab-api', unit: 'nginx' },
+      session,
+    );
+
+    // The budget counts actions the agent chose to take, not the commands a
+    // tool happened to need to take one.
+    expect(session.actionsUsed).toBe(1);
+  });
+
+  it('reports a transport failure inside apply as a typed error', async () => {
+    const runner = fakeRunner(() => Promise.reject(new Error('ssh: connection closed')));
+    const result = await build(runner, { tools: [stagedTool] }).execute(
+      'staged_unit',
+      { host: 'lab-api', unit: 'nginx' },
+      new Session(),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toMatch(/connection closed/);
+  });
+
+  it('hands apply the host HTTP checks from policy, translated out of YAML', async () => {
+    await build(fakeRunner([raw(), raw()]), {
+      tools: [stagedTool],
+      policy: POLICY_WITH_CHECKS,
+    }).execute('staged_unit', { host: 'lab-api', unit: 'nginx' }, new Session());
+
+    // Both rules tie on specificity, so both contribute. Dropping either would
+    // quietly weaken verification rather than policy.
+    expect(seenCtx?.httpChecks).toEqual([
+      { url: 'https://127.0.0.1/health', expectStatus: 200 },
+      { url: 'http://127.0.0.1:3000/ready', expectStatus: 200 },
+    ]);
+  });
+
+  it('gives apply an empty check list for a host with none', async () => {
+    await build(fakeRunner([raw(), raw()]), {
+      tools: [stagedTool],
+      policy: POLICY_WITH_CHECKS,
+    }).execute('staged_unit', { host: 'lab-db', unit: 'postgresql' }, new Session());
+
+    expect(seenCtx?.httpChecks).toEqual([{ url: 'https://127.0.0.1/health', expectStatus: 200 }]);
+    expect(seenCtx?.sessionId).toMatch(/^s_/);
+    expect(seenCtx?.host).toBe('lab-db');
+  });
+
+  it('never reaches apply when the policy refuses', async () => {
+    const runner = fakeRunner([raw()]);
+    const result = await build(runner, {
+      tools: [{ ...stagedTool, risk: Risk.Destructive }],
+    }).execute('staged_unit', { host: 'lab-api', unit: 'nginx' }, new Session());
+
+    expect(result.ok).toBe(false);
+    expect(runner.calls).toHaveLength(0);
+    expect(seenCtx).toBeUndefined();
+  });
+});
+
 describe('ToolRegistry', () => {
   it('rejects a duplicate name', () => {
     const registry = new ToolRegistry();
@@ -453,6 +599,36 @@ describe('ToolRegistry', () => {
     };
 
     expect(() => registry.register(safe)).not.toThrow();
+  });
+
+  it('refuses a tool that defines both build and apply', () => {
+    // Two answers to "what does this run?" — and the plan a human approves has
+    // to be the thing that actually runs.
+    const registry = new ToolRegistry();
+    const ambiguous = { ...echoTool, name: 'two_ways', apply: stagedTool.apply };
+
+    expect(() => registry.register(ambiguous)).toThrowError(
+      /defines both build and apply; it must define exactly one/,
+    );
+  });
+
+  it('refuses a tool that defines neither build nor apply', () => {
+    const registry = new ToolRegistry();
+    const inert: EchoTool = {
+      name: 'does_nothing',
+      description: echoTool.description,
+      risk: echoTool.risk,
+      input: echoTool.input,
+      parse: echoTool.parse,
+    };
+
+    expect(() => registry.register(inert)).toThrowError(/defines neither build nor apply/);
+  });
+
+  it('accepts a staged tool', () => {
+    const registry = new ToolRegistry();
+
+    expect(() => registry.register(stagedTool)).not.toThrow();
   });
 
   it('lists tools and filters by risk', () => {

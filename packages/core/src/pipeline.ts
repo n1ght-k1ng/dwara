@@ -3,11 +3,20 @@ import { wrap, type Envelope } from './envelope.js';
 import { DwaraError } from './errors.js';
 import { evaluate } from './policy/evaluate.js';
 import type { LoadedPolicy } from './policy/load.js';
+import { selectHostRules } from './policy/match.js';
 import { defaultRedactor, type Redactor } from './redact/redact.js';
 import type { RegisteredTool, ToolRegistry } from './registry.js';
 import type { Session } from './session.js';
 import type { SshConfig } from './ssh/config.js';
-import type { Decision, RawResult, RemoteCommand, ToolResult } from './types.js';
+import type {
+  Ctx,
+  Decision,
+  HttpCheck,
+  RawResult,
+  RemoteCommand,
+  SnapshotRef,
+  ToolResult,
+} from './types.js';
 
 /** What the pipeline needs to run a command. `SshTransport` satisfies it. */
 export interface CommandRunner {
@@ -140,7 +149,7 @@ export class Pipeline {
 
     let raws: RawResult[];
     try {
-      raws = await this.run(tool, validated, host);
+      raws = await this.run(tool, validated, host, this.context(host, session));
     } catch (err) {
       const error = DwaraError.from(err);
       await this.write({
@@ -243,15 +252,56 @@ export class Pipeline {
     };
   }
 
-  /** Runs a tool's commands in order, stopping at the first transport failure. */
-  private async run(tool: RegisteredTool, input: unknown, host: string): Promise<RawResult[]> {
-    const commands = tool.build(input);
-    const results: RawResult[] = [];
+  /**
+   * Runs a tool's commands, stopping at the first transport failure.
+   *
+   * A tool that defines `apply` sequences its own commands, because a later one
+   * depends on an earlier one's output. It runs them through the same `ctx.run`
+   * this method would have used, so the transport, the escaping and the output
+   * cap are identical either way — the only difference is who decides what comes
+   * next. The registry guarantees exactly one of the two is defined.
+   */
+  private async run(
+    tool: RegisteredTool,
+    input: unknown,
+    host: string,
+    ctx: Ctx,
+  ): Promise<RawResult[]> {
+    const staged = tool.apply(input, ctx);
+    if (staged !== undefined) return [...(await staged)];
 
-    for (const command of commands) {
+    const results: RawResult[] = [];
+    for (const command of tool.build(input) ?? []) {
       results.push(await this.options.runner.run(host, command));
     }
     return results;
+  }
+
+  /** The execution context handed to `apply`, `verify` and `rollback`. */
+  private context(host: string, session: Session, snapshot?: SnapshotRef): Ctx {
+    return {
+      host,
+      sessionId: session.id,
+      run: (command) => this.options.runner.run(host, command),
+      httpChecks: this.httpChecksFor(host),
+      ...(snapshot === undefined ? {} : { snapshot }),
+    };
+  }
+
+  /**
+   * The host's HTTP postconditions, translated out of policy.
+   *
+   * Every rule that tied on specificity contributes, matching how the evaluator
+   * treats a tie: a check named by any winning rule is one the operator asked
+   * for, and silently dropping it would weaken verification rather than policy.
+   */
+  private httpChecksFor(host: string): readonly HttpCheck[] {
+    return selectHostRules(this.options.policy.policy.hosts, host).flatMap((rule) =>
+      (rule.health_checks ?? []).map((check) => ({
+        url: check.http,
+        expectStatus: check.expect_status,
+      })),
+    );
   }
 
   /** Records a refusal and returns it. Nothing ran. */

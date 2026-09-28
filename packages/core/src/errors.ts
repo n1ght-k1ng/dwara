@@ -24,6 +24,14 @@ export type DwaraErrorCode =
   | 'SUDO_PASSWORD_REQUIRED'
   | 'TIMEOUT'
   | 'COMMAND_FAILED'
+  // Mutations. Each names a distinct point on the transactional path, because
+  // "the change failed" and "the change failed and could not be undone" are not
+  // the same situation for whoever reads the result.
+  | 'SNAPSHOT_FAILED'
+  | 'VALIDATOR_FAILED'
+  | 'VERIFY_FAILED'
+  | 'ROLLBACK_FAILED'
+  | 'PLAN_MISMATCH'
   // Everything else
   | 'INTERNAL';
 

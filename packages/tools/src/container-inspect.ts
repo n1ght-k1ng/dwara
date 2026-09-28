@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField, toNumber, unavailable } from './common.js';
 
 const input = z
@@ -46,7 +46,7 @@ export interface ContainerDetail {
  * output is several thousand lines of mostly irrelevant defaults, and DESIGN
  * asks for compact, structured results.
  */
-export const containerInspect: ToolDef<Input, ContainerDetail> = {
+export const containerInspect: BuiltToolDef<Input, ContainerDetail> = {
   name: 'container_inspect',
   risk: Risk.Read,
   description: [

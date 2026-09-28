@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Risk, type ToolDef } from '@dwara/core';
+import { Risk, type BuiltToolDef } from '@dwara/core';
 import { READ_TIMEOUT_MS, at, hostField, lines, toNumber } from './common.js';
 
 const input = z
@@ -37,7 +37,7 @@ export interface OpenPorts {
  * on 0.0.0.0 look identical in a process list and are completely different
  * facts.
  */
-export const openPorts: ToolDef<Input, OpenPorts> = {
+export const openPorts: BuiltToolDef<Input, OpenPorts> = {
   name: 'open_ports',
   risk: Risk.Read,
   description: [
