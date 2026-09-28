@@ -25,7 +25,8 @@
     "testbed:reset": "./testbed/scripts/reset.sh",
     "testbed:status": "./testbed/scripts/status.sh",
     "testbed:break": "./testbed/scripts/break.sh",
-    "test:coverage": "vitest run --project unit --coverage"
+    "test:coverage": "vitest run --project unit --coverage",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",

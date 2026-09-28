@@ -21,15 +21,6 @@
     "declarationMap": true,
     "sourceMap": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-
-    "baseUrl": ".",
-    "paths": {
-      "@dwara/core": ["./packages/core/src/index.ts"],
-      "@dwara/tools": ["./packages/tools/src/index.ts"],
-      "@dwara/mcp-server": ["./packages/mcp-server/src/index.ts"],
-      "@dwara/cli": ["./packages/cli/src/index.ts"],
-      "@dwara/hook": ["./packages/hook/src/index.ts"]
-    }
+    "forceConsistentCasingInFileNames": true
   }
 }

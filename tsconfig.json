@@ -1,7 +1,26 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+
+    // Workspace packages resolve to their sources here, and only here. This
+    // config typechecks the repo as a whole, so it has to work on a clean
+    // checkout before anything is built.
+    //
+    // These mappings must NOT live in tsconfig.base.json. Each package's own
+    // config sets `rootDir: ./src` for its declaration build, and a mapping to
+    // another package's source puts a file outside that root -- TS6059, which
+    // broke `pnpm build` in CI while a fresh `pnpm typecheck` still passed.
+    // Per-package builds resolve these through the built types in dist instead,
+    // which pnpm's topological build order guarantees exist.
+    "baseUrl": ".",
+    "paths": {
+      "@dwara/core": ["./packages/core/src/index.ts"],
+      "@dwara/tools": ["./packages/tools/src/index.ts"],
+      "@dwara/mcp-server": ["./packages/mcp-server/src/index.ts"],
+      "@dwara/cli": ["./packages/cli/src/index.ts"],
+      "@dwara/hook": ["./packages/hook/src/index.ts"]
+    }
   },
   "include": ["packages/*/src/**/*.ts", "test/**/*.ts", "*.ts"]
 }
