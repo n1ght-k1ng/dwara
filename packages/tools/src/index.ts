@@ -1,10 +1,56 @@
+import { ToolRegistry } from '@dwara/core';
+
+export { hostOverview } from './host-overview.js';
+export { serviceStatus } from './service-status.js';
+export { tailLogs } from './tail-logs.js';
+export { diskUsage } from './disk-usage.js';
+export { openPorts } from './open-ports.js';
+export { dockerPs } from './docker-ps.js';
+export { containerLogs } from './container-logs.js';
+export { containerInspect } from './container-inspect.js';
+export { certExpiry } from './cert-expiry.js';
+export { readConfig } from './read-config.js';
+export { securityAudit } from './security-audit.js';
+
+export { DENIED_PATHS, DEFAULT_CONFIG_PATHS, DEFAULT_LOG_PATHS, guardPath } from './paths.js';
+
+import { hostOverview } from './host-overview.js';
+import { serviceStatus } from './service-status.js';
+import { tailLogs } from './tail-logs.js';
+import { diskUsage } from './disk-usage.js';
+import { openPorts } from './open-ports.js';
+import { dockerPs } from './docker-ps.js';
+import { containerLogs } from './container-logs.js';
+import { containerInspect } from './container-inspect.js';
+import { certExpiry } from './cert-expiry.js';
+import { readConfig } from './read-config.js';
+import { securityAudit } from './security-audit.js';
+
 /**
- * Package identifier, used by the CLI's `doctor` output and by the audit log
- * so every entry records which build produced it.
+ * A registry holding every tool in this release.
  *
- * This package is a Phase 0 stub; its implementation lands in a later phase
- * (see `docs/PLAN.md`).
+ * All read risk. Mutating tools arrive in Phase 3, and the registry refuses to
+ * accept one without snapshot, verify and rollback.
  */
+export function createRegistry(): ToolRegistry {
+  const registry = new ToolRegistry();
+
+  registry.register(hostOverview);
+  registry.register(serviceStatus);
+  registry.register(tailLogs);
+  registry.register(diskUsage);
+  registry.register(openPorts);
+  registry.register(dockerPs);
+  registry.register(containerLogs);
+  registry.register(containerInspect);
+  registry.register(certExpiry);
+  registry.register(readConfig);
+  registry.register(securityAudit);
+
+  return registry;
+}
+
+/** Package identifier, recorded in audit entries so each one names its build. */
 export const PACKAGE_NAME = '@dwara/tools' as const;
 
 /** Version of the Dwara toolchain this build belongs to. */
