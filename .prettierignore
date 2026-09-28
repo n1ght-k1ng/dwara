@@ -7,3 +7,6 @@ testbed/.keys
 # Authored prose: keep the original wrapping
 docs
 CLAUDE.md
+
+# Captured host output: reformatting it would corrupt the fixtures
+packages/tools/src/fixtures
