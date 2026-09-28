@@ -50,5 +50,9 @@ redaction:
   extra_patterns: []
 
 limits:
-  max_actions_per_session: 20
+  # 20 is the example value in DESIGN, and the Phase 2 exit gate showed it is
+  # unrealistically low: a diagnosis spent all twenty on one host and was cut off
+  # before it could look at the others. A real investigation reads widely before
+  # it concludes anything.
+  max_actions_per_session: 60
   max_hosts_per_action: 1

@@ -26,6 +26,7 @@ describe('host_overview', () => {
         'healthy/host_overview.meminfo',
         'healthy/host_overview.is-system-running',
         'healthy/host_overview.failed-units',
+        'healthy/disk_usage.df-all',
       ]),
     );
 
@@ -65,6 +66,7 @@ describe('host_overview', () => {
         'healthy/host_overview.meminfo',
         asResult('degraded\n', { exitCode: 1 }),
         asResult('nginx.service loaded failed failed A high performance web server\n'),
+        'healthy/disk_usage.df-all',
       ]),
     );
 
@@ -72,11 +74,42 @@ describe('host_overview', () => {
     expect(result.systemd.failedUnits).toEqual(['nginx.service']);
   });
 
+  it('reports filesystem pressure, which orientation has to include', () => {
+    // The Phase 2 exit gate failed the disk-full scenario with twenty tool calls
+    // and not one of them reaching disk_usage. The orientation tool reported
+    // memory and said nothing about disk, so nothing pointed that way.
+    const result = healthy();
+
+    expect(result.disk.root.usedPercent).toBeGreaterThanOrEqual(0);
+    expect(result.disk.nearlyFull).toEqual([]);
+  });
+
+  it('names a full bounded mount even when / is fine', () => {
+    const result = hostOverview.parse(
+      asResults([
+        'healthy/host_overview.uname',
+        'healthy/host_overview.os-release',
+        'healthy/host_overview.uptime',
+        'healthy/host_overview.loadavg',
+        'healthy/host_overview.meminfo',
+        'healthy/host_overview.is-system-running',
+        'healthy/host_overview.failed-units',
+        'broken/diskfull.df-all',
+      ]),
+    );
+
+    const full = result.disk.nearlyFull.find((mount) => mount.mountedOn === '/var/log');
+    expect(full).toMatchObject({ usedPercent: 100, availableBytes: 0 });
+    // The asymmetry is the whole point: / is healthy, /var/log is not.
+    expect(result.disk.root.usedPercent).toBeLessThan(85);
+  });
+
   it('survives every command returning nothing', () => {
-    const result = hostOverview.parse(asResults(Array.from({ length: 7 }, () => asResult(''))));
+    const result = hostOverview.parse(asResults(Array.from({ length: 8 }, () => asResult(''))));
     expect(result.systemd.state).toBe('unknown');
     expect(result.load).toEqual({});
     expect(result.memory.usedPercent).toBeUndefined();
+    expect(result.disk.nearlyFull).toEqual([]);
   });
 });
 
