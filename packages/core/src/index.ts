@@ -49,3 +49,9 @@ export { verifyChain } from './audit/verify.js';
 export type { ChainReport, ChainProblem } from './audit/verify.js';
 export { auditEntrySchema, canonicalise, hashEntry, GENESIS_HASH } from './audit/entry.js';
 export type { AuditEntry, AuditInput } from './audit/entry.js';
+
+export { Session } from './session.js';
+export { ToolRegistry, mcpName } from './registry.js';
+export type { RegisteredTool, ValidationResult } from './registry.js';
+export { Pipeline } from './pipeline.js';
+export type { PipelineOptions, CommandRunner } from './pipeline.js';
