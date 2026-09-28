@@ -6,7 +6,7 @@ import type { LoadedPolicy } from './policy/load.js';
 import { selectHostRules } from './policy/match.js';
 import { defaultRedactor, type Redactor } from './redact/redact.js';
 import type { RegisteredTool, ToolRegistry } from './registry.js';
-import { createSnapshot, restoreSnapshot } from './snapshot/manager.js';
+import { confirmUnits, createSnapshot, restoreSnapshot } from './snapshot/manager.js';
 import { pruneSnapshots } from './snapshot/retention.js';
 import { summariseVerify } from './verify/run.js';
 import type { Session } from './session.js';
@@ -298,9 +298,13 @@ export class Pipeline {
                   ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
                 },
                 // The loudest thing Dwara can say. A human has to look.
+                // Only offer `dwara rollback` when there is something for it
+                // to put back. A units-only snapshot holds no files, and
+                // sending someone to a command that cannot help wastes the one
+                // moment they most need a straight answer.
                 hint:
-                  snapshot === undefined
-                    ? 'this host needs a human; Dwara could not restore it'
+                  snapshot === undefined || snapshot.paths.length === 0
+                    ? 'this host needs a human; Dwara changed it and could not put it back'
                     : `this host needs a human. Try: dwara rollback ${snapshot.id}`,
               },
             );
@@ -450,10 +454,26 @@ export class Pipeline {
             );
           }
         }
-        if (ok) notes.push(`${commands.length} recovery command(s) ran`);
       } catch (err) {
         ok = false;
         notes.push(`recovery commands threw: ${DwaraError.from(err).message}`);
+      }
+    }
+
+    // The recovery commands exiting zero is not the claim being made. A
+    // `Type=simple` unit reports a successful `systemctl start` as soon as the
+    // fork succeeds, so a service whose binary dies immediately rolls back
+    // "successfully" and keeps crash-looping. Dwara would then say the host is
+    // back as it was, which is the one thing it must never get wrong. So the
+    // units are watched for a moment and compared against what was recorded.
+    if (snapshot !== undefined) {
+      try {
+        const units = await confirmUnits(snapshot, ctx);
+        ok &&= units.ok;
+        notes.push(units.detail);
+      } catch (err) {
+        ok = false;
+        notes.push(`could not confirm the units: ${DwaraError.from(err).message}`);
       }
     }
 

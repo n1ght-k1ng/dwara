@@ -11,6 +11,13 @@ export { containerInspect } from './container-inspect.js';
 export { certExpiry } from './cert-expiry.js';
 export { readConfig } from './read-config.js';
 export { securityAudit } from './security-audit.js';
+export {
+  PROTECTED_UNITS,
+  RESTART_TIMEOUT_MS,
+  createRestartService,
+  restartService,
+} from './restart-service.js';
+export type { RestartResult, RestartServiceOptions, UnitReading } from './restart-service.js';
 
 export { DENIED_PATHS, DEFAULT_CONFIG_PATHS, DEFAULT_LOG_PATHS, guardPath } from './paths.js';
 
@@ -25,12 +32,13 @@ import { containerInspect } from './container-inspect.js';
 import { certExpiry } from './cert-expiry.js';
 import { readConfig } from './read-config.js';
 import { securityAudit } from './security-audit.js';
+import { restartService } from './restart-service.js';
 
 /**
  * A registry holding every tool in this release.
  *
- * All read risk. Mutating tools arrive in Phase 3, and the registry refuses to
- * accept one without snapshot, verify and rollback.
+ * The registry refuses any mutating tool that does not define snapshot, verify
+ * and rollback, so a change Dwara cannot undo never becomes callable.
  */
 export function createRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
@@ -46,6 +54,8 @@ export function createRegistry(): ToolRegistry {
   registry.register(certExpiry);
   registry.register(readConfig);
   registry.register(securityAudit);
+
+  registry.register(restartService);
 
   return registry;
 }

@@ -251,6 +251,107 @@ export async function restoreSnapshot(ref: SnapshotRef, ctx: Ctx): Promise<Resto
   };
 }
 
+/** Whether a recorded unit was meant to be running. */
+function wasRunning(state: UnitState): boolean {
+  return state.activeState === 'active' || state.activeState === 'activating';
+}
+
+/** What a post-rollback check of the recorded units found. */
+export interface UnitConfirmation {
+  readonly ok: boolean;
+  readonly mismatched: readonly string[];
+  readonly detail: string;
+}
+
+export interface ConfirmUnitsOptions {
+  /** How long to watch before believing the units settled. */
+  readonly settleMs?: number;
+  sleep?(ms: number): Promise<void>;
+  now?(): number;
+}
+
+/**
+ * Confirms the recorded units are back in the state the snapshot captured.
+ *
+ * Exists because a rollback command's exit code proves almost nothing. A
+ * `Type=simple` unit reports a successful `systemctl start` the instant the
+ * fork succeeds, so starting a service whose binary exits immediately returns
+ * zero and leaves the unit crash-looping. Dwara would then report "the host is
+ * back as it was", which is the one claim it must never make wrongly.
+ *
+ * So the restore is observed rather than assumed, over a short window, and two
+ * things have to hold for every unit: it is running if it was running, and its
+ * restart count has not climbed above what was recorded. The second is what
+ * catches the loop, exactly as it does during verification.
+ */
+export async function confirmUnits(
+  snapshot: SnapshotRef,
+  ctx: Ctx,
+  options: ConfirmUnitsOptions = {},
+): Promise<UnitConfirmation> {
+  const recorded = Object.entries(snapshot.units ?? {});
+  if (recorded.length === 0) {
+    return { ok: true, mismatched: [], detail: 'snapshot recorded no units' };
+  }
+
+  const now = options.now ?? (() => Date.now());
+  const sleep = options.sleep ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
+  const deadline = now() + (options.settleMs ?? 3_000);
+  const problems = new Map<string, string>();
+
+  for (;;) {
+    const observed = parseUnits(
+      await ctx.run(
+        sudo([
+          'systemctl',
+          'show',
+          ...recorded.map(([unit]) => unit),
+          '--no-pager',
+          `--property=${UNIT_PROPERTIES}`,
+        ]),
+      ),
+    );
+
+    for (const [unit, before] of recorded) {
+      const after = observed[unit];
+      if (after === undefined) {
+        problems.set(unit, `${unit} could not be read back`);
+        continue;
+      }
+
+      if (wasRunning(before) !== wasRunning(after)) {
+        problems.set(unit, `${unit} was ${before.activeState} and is ${after.activeState}`);
+        continue;
+      }
+
+      // A climbing count means it is being resurrected, not running.
+      if (
+        after.restarts !== undefined &&
+        before.restarts !== undefined &&
+        after.restarts > before.restarts
+      ) {
+        problems.set(
+          unit,
+          `${unit} has restarted ${after.restarts - before.restarts} time(s) since`,
+        );
+      }
+    }
+
+    if (now() >= deadline) break;
+    await sleep(Math.min(500, Math.max(0, deadline - now())));
+  }
+
+  const mismatched = [...problems.keys()];
+  return {
+    ok: mismatched.length === 0,
+    mismatched,
+    detail:
+      mismatched.length === 0
+        ? `${recorded.length} unit(s) are as the snapshot recorded them`
+        : [...problems.values()].join('; '),
+  };
+}
+
 /** Every command a snapshot issues needs root, and none of them may prompt. */
 function sudo(argv: readonly string[]): RemoteCommand {
   return { argv, sudo: true, timeoutMs: SNAPSHOT_TIMEOUT_MS };

@@ -72,12 +72,19 @@ describeTestbed('dwara MCP server', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('advertises all eleven tools under read_ names', async () => {
+  it('advertises every tool under a name prefixed by its risk class', async () => {
     const { tools } = await client.listTools();
 
-    expect(tools).toHaveLength(11);
-    // Client permission rules match on the prefix, so every name must carry it.
-    for (const tool of tools) expect(tool.name).toMatch(/^read_/);
+    // Client permission rules match on the prefix, so every name must carry
+    // it, and the mutating tools must be separable from the reads by name
+    // alone -- that is what lets a client auto-allow read_* and prompt for the
+    // rest without knowing which tools exist.
+    for (const tool of tools) expect(tool.name).toMatch(/^(read|reversible|config)_/);
+
+    expect(tools.filter((tool) => tool.name.startsWith('read_'))).toHaveLength(11);
+    expect(tools.filter((tool) => tool.name.startsWith('reversible_')).map((t) => t.name)).toEqual([
+      'reversible_restart_service',
+    ]);
     expect(tools.map((t) => t.name).sort()).toEqual([...toolNames].sort());
   });
 

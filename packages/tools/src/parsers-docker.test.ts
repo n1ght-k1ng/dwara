@@ -495,17 +495,30 @@ describe('security_audit', () => {
 });
 
 describe('the registry', () => {
-  it('holds all eleven read tools', () => {
+  it('holds the eleven read tools and the mutating ones', () => {
     const registry = createRegistry();
 
-    expect(registry.size).toBe(11);
     expect(registry.byRisk('read' as never)).toHaveLength(11);
+    expect(registry.byRisk('reversible' as never).map((tool) => tool.name)).toEqual([
+      'restart_service',
+    ]);
+    expect(registry.size).toBe(12);
   });
 
-  it('exposes every tool under a read_ prefixed name', () => {
-    // Client permission rules match on the prefix, so it has to be there.
+  it('prefixes every tool name with its risk class', () => {
+    // Client permission rules match on the prefix, so it has to be there, and
+    // it has to come from the declared risk rather than from a hand-typed name.
     for (const tool of createRegistry().list()) {
-      expect(tool.mcpName).toMatch(/^read_/);
+      expect(tool.mcpName, tool.name).toBe(`${tool.risk}_${tool.name}`);
+    }
+    expect(createRegistry().get('restart_service')?.mcpName).toBe('reversible_restart_service');
+  });
+
+  it('gives every mutating tool the machinery it cannot be registered without', () => {
+    for (const tool of createRegistry().list()) {
+      if (!tool.mutates) continue;
+      expect(tool.snapshot({ host: 'h', unit: 'nginx' }), tool.name).toBeDefined();
+      expect(tool.rollback, tool.name).toBeTypeOf('function');
     }
   });
 

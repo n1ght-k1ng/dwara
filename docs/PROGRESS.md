@@ -146,6 +146,32 @@ DESIGN §3 steps 5 and 7 are real now: snapshot → act → verify → roll back
 
 414 unit tests, 64 integration.
 
+**Task 6 — `restart_service`, the first mutating tool (2026-09-28).** `feat(tools)`.
+
+The full PLAN.md matrix passes against the lab: success, verify-failure-triggers-rollback, timeout
+mid-action, rollback restores the recorded state, idempotent re-run — plus a clean-rollback case and a
+protected-unit refusal. Driven through the whole `Pipeline`, not the tool alone, because the thing under
+test is the transaction. A purpose-built `dwara-testsvc` unit whose behaviour a file controls, so every
+case is a real systemd state rather than a mock.
+
+**The test matrix found two things unit tests could not.**
+
+- **A rollback that reported success while the service crash-looped.** `systemctl start` on a
+  `Type=simple` unit exits 0 the moment the fork succeeds, so undoing a restart of a service whose binary
+  now exits 1 returned zero from every command — and Dwara said `VERIFY_FAILED`, "the host is back as it
+  was". It was not. `confirmUnits` now watches the recorded units after the undo and requires each to be
+  running if it was running, with a restart count that has not climbed. This is the single most important
+  claim Dwara makes, and it was wrong.
+- **`systemctl stop` leaves a crashed unit `failed`, not `inactive`.** So rolling back to "it was not
+  running" left the host in a state the snapshot never recorded, and the unit in `host_overview`'s failed
+  list for good. `reset-failed` now precedes both the start and the stop; the lab sudoers grants it.
+
+`ssh`, `dbus`, `dbus-broker`, `systemd-journald` and `systemd-logind` cannot be restarted through this
+tool at all — a floor in code, like the path deny-list. Restarting sshd is reasonable from a console and
+uniquely bad from an agent, whose one unrecoverable failure is losing the connection it needs to recover.
+
+437 unit tests, 73 integration.
+
 ## Done
 
 **Repo setup**

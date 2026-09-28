@@ -56,6 +56,7 @@ export {
 
 export {
   SNAPSHOT_ROOT,
+  confirmUnits,
   copyOf,
   createSnapshot,
   guardSnapshotPath,
@@ -64,7 +65,7 @@ export {
   restoreSnapshot,
   snapshotDir,
 } from './snapshot/manager.js';
-export type { RestoreResult } from './snapshot/manager.js';
+export type { ConfirmUnitsOptions, RestoreResult, UnitConfirmation } from './snapshot/manager.js';
 export {
   KEEP_PER_HOST,
   MAX_AGE_DAYS,

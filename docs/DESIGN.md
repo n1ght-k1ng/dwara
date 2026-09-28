@@ -330,3 +330,30 @@ actually serves and needs no network path back to the developer machine. This ma
 `https://127.0.0.1:8443/health` wrong — 8443 is the host-published port, and nginx inside `lab-api` listens
 on 443 — which is the same class of bug as Phase 2's `open_ports` fixture: the tested path was not the path
 the tool takes.
+
+2026-09-28 — **A rollback's success is confirmed by observation, not by exit codes.** Reason: a
+`Type=simple` unit reports a successful `systemctl start` the instant the fork succeeds, so rolling back
+a service whose binary now exits 1 returns zero from every command while the unit crash-loops. Dwara
+would then report `VERIFY_FAILED` with "the host is back as it was", which is the one claim it must never
+get wrong. `confirmUnits` watches the recorded units for a few seconds after the undo and requires two
+things: each is running if it was running, and its restart count has not climbed above what was recorded.
+The second is what catches the loop — the same signal the verifier uses, for the same reason. Found by an
+integration test that expected `VERIFY_FAILED` and was right to be suspicious when it got it.
+
+2026-09-28 — **Rolling a unit back to "not running" also clears its failed state.** Reason: `systemctl
+stop` on a unit that crashed leaves `ActiveState=failed`, not `inactive`. A rollback that stopped there
+would leave the host in a state the snapshot never recorded, and leave the unit in `host_overview`'s
+failed list indefinitely. `reset-failed` precedes both the start and the stop.
+
+2026-09-28 — **`restart_service` refuses ssh, dbus, dbus-broker, systemd-journald and systemd-logind.**
+Reason: the same standing as the path deny-list — a floor in code, not a default a policy file can lift.
+Restarting sshd is a reasonable thing for a person at a console to do and a uniquely bad thing for an
+agent to do, because the one failure it cannot recover from is losing the connection it would need to
+recover. dbus and logind wedge systemd under a container init; journald holds the logs a diagnosis is
+made of.
+
+2026-09-28 — **The `reversible` risk class describes the kind of change, not a promise the host
+recovers.** Reason: a restart is reversible in the sense that Dwara can put back what the unit was asked
+to do. Whether it comes back healthy depends on why it was healthy before — if the fault is in what the
+unit runs, `systemctl start` cannot fix it, and Dwara reports `ROLLBACK_FAILED` and says a human is
+needed. That is the honest answer, and it is why the two error codes are distinct.

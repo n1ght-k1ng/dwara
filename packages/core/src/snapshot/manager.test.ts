@@ -3,6 +3,7 @@ import { DwaraError } from '../errors.js';
 import type { Ctx, RawResult, RemoteCommand, SnapshotRef } from '../types.js';
 import {
   SNAPSHOT_ROOT,
+  confirmUnits,
   copyOf,
   createSnapshot,
   guardSnapshotPath,
@@ -264,6 +265,100 @@ describe('createSnapshot', () => {
 
     expect(tee?.argv).toEqual(['tee', '--', `${snapshotDir(ref.id)}/meta.json`]);
     expect(meta).toMatchObject({ id: ref.id, host: 'lab-api', paths: [NGINX], hashes: ref.hashes });
+  });
+});
+
+describe('confirmUnits', () => {
+  const base: SnapshotRef = {
+    id: 'snap_0a1b2c3d',
+    host: 'lab-api',
+    createdAt: '2026-09-28T00:00:00.000Z',
+    paths: [],
+    hashes: {},
+    units: {
+      'nginx.service': { activeState: 'active', unitFileState: 'enabled', restarts: 0 },
+    },
+  };
+
+  /** A host reporting the given unit fields, with no wall-clock waiting. */
+  function watching(...answers: string[]): FakeCtx {
+    let nth = 0;
+    return ctxWith(() => ({ stdout: answers[Math.min(nth++, answers.length - 1)] ?? '' }));
+  }
+
+  const NO_WAIT = { settleMs: 0 };
+
+  it('accepts a unit that is running as recorded', async () => {
+    const ctx = watching('Id=nginx.service\nActiveState=active\nNRestarts=0');
+
+    expect(await confirmUnits(base, ctx, NO_WAIT)).toMatchObject({ ok: true, mismatched: [] });
+  });
+
+  it('rejects a unit that was running and is not', async () => {
+    const ctx = watching('Id=nginx.service\nActiveState=failed\nNRestarts=0');
+    const result = await confirmUnits(base, ctx, NO_WAIT);
+
+    expect(result.ok).toBe(false);
+    expect(result.detail).toBe('nginx.service was active and is failed');
+  });
+
+  it('rejects a unit that is up only because it keeps being restarted', async () => {
+    // The case exit codes cannot see. `systemctl start` on a Type=simple unit
+    // returns zero the moment the fork succeeds, so a service whose binary dies
+    // immediately rolls back "successfully" and keeps looping.
+    const ctx = watching('Id=nginx.service\nActiveState=active\nNRestarts=4');
+    const result = await confirmUnits(base, ctx, NO_WAIT);
+
+    expect(result.ok).toBe(false);
+    expect(result.detail).toBe('nginx.service has restarted 4 time(s) since');
+  });
+
+  it('catches a unit that looks fine at first and loops a moment later', async () => {
+    const ctx = watching(
+      'Id=nginx.service\nActiveState=active\nNRestarts=0',
+      'Id=nginx.service\nActiveState=active\nNRestarts=2',
+    );
+    let slept = 0;
+    const result = await confirmUnits(base, ctx, {
+      settleMs: 600,
+      now: () => slept,
+      sleep: (ms) => {
+        slept += ms;
+        return Promise.resolve();
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.mismatched).toEqual(['nginx.service']);
+  });
+
+  it('accepts a unit that was stopped and is still stopped', async () => {
+    const stopped: SnapshotRef = {
+      ...base,
+      units: {
+        'nginx.service': { activeState: 'inactive', unitFileState: 'enabled', restarts: 7 },
+      },
+    };
+    // reset-failed zeroes the count, which must not read as an improvement gone
+    // wrong: fewer restarts than recorded is fine, more is not.
+    const ctx = watching('Id=nginx.service\nActiveState=inactive\nNRestarts=0');
+
+    expect((await confirmUnits(stopped, ctx, NO_WAIT)).ok).toBe(true);
+  });
+
+  it('rejects a unit that cannot be read back at all', async () => {
+    const result = await confirmUnits(base, watching(''), NO_WAIT);
+
+    expect(result.ok).toBe(false);
+    expect(result.detail).toContain('could not be read back');
+  });
+
+  it('passes trivially when the snapshot recorded no units', async () => {
+    const ctx = watching('');
+    const result = await confirmUnits({ ...base, units: undefined }, ctx, NO_WAIT);
+
+    expect(result).toMatchObject({ ok: true, detail: 'snapshot recorded no units' });
+    expect(ctx.calls).toHaveLength(0);
   });
 });
 
