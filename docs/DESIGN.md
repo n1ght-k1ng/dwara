@@ -371,3 +371,23 @@ container Dwara will not touch.
 `--restart=always` that dies on boot passed verification — Docker restarts it within milliseconds, so it
 reads as running at almost every poll. The service check had closed this exact gap and the container
 check had not. Found when the matrix restarted a doomed container and the pipeline called it a success.
+
+2026-09-29 — **A tool may declare `restorable: false`, and the pipeline then never claims the host is
+back as it was.** Reason: freeing disk space genuinely cannot be undone — you cannot back up the thing
+you are deleting onto the filesystem you are emptying, so `rotate_logs`'s snapshot is a record of what
+went rather than a copy of it. Such a tool still defines `snapshot`, `verify` and `rollback`, because
+`CLAUDE.md` rule 3 requires them, but its rollback has no commands to give. Without the flag a failed
+verification would run an empty rollback, find nothing wrong with it, and report `VERIFY_FAILED` with
+"the host is back as it was" — the same class of false claim that `confirmUnits` exists to prevent. With
+it, the result says the change stands and points at the snapshot for what was removed. The code stays
+`VERIFY_FAILED` rather than `ROLLBACK_FAILED`: nothing went wrong with the undo, because there was never
+an undo to attempt.
+
+2026-09-29 — **`rotate_logs` truncates; it does not delete, and it does not use `logrotate`.** Reason:
+`truncate -s 0` keeps the inode, so the process holding the file open carries on writing to the same
+place and the space returns immediately. Unlinking instead leaves the writer appending to a deleted
+inode — the bytes stay allocated until that service restarts, so `df` does not move while every
+indication says the fix worked. `logrotate` is not used because it acts only on files it already has a
+configuration for, and a file with a working rule is rarely the one that filled the disk; the runaway
+writer nobody configured is. It was installed in the lab image for this tool and has been removed again
+rather than left as dead configuration.

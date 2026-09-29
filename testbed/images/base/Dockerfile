@@ -22,7 +22,6 @@ RUN apt-get update \
       openssh-server sudo \
       ca-certificates curl iproute2 procps psmisc \
       less nano file jq python3-minimal \
-      logrotate \
  && rm -rf /var/lib/apt/lists/*
 
 # Units that cannot work inside a container and would otherwise leave the host

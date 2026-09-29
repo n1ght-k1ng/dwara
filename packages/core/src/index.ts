@@ -81,6 +81,7 @@ export type { PruneResult, RetentionOptions, StoredSnapshot } from './snapshot/r
 export {
   DEFAULT_STABLE_MS,
   containerRunningAndHealthy,
+  filesystemHasHeadroom,
   httpResponds,
   policyHttpChecks,
   serviceActiveAndStable,

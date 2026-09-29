@@ -299,26 +299,42 @@ export class Pipeline {
                 hint: 'the host is back as it was; read the failing check and try a different change',
               },
             )
-          : new DwaraError(
-              'ROLLBACK_FAILED',
-              `${name} did not work and could not be undone: ${summariseVerify(verify)}. Rollback: ${rollback.detail}`,
-              {
-                details: {
-                  tool: name,
-                  host,
-                  ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+          : !tool.restorable
+            ? new DwaraError(
+                'VERIFY_FAILED',
+                `${name} did not work, and cannot be undone: ${summariseVerify(verify)}`,
+                {
+                  details: {
+                    tool: name,
+                    host,
+                    ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+                  },
+                  // Not ROLLBACK_FAILED: nothing went wrong with the undo,
+                  // because there was never an undo to attempt. What must not
+                  // happen is telling anyone the host is back as it was.
+                  hint: 'the change stands and the host is not as it was; the snapshot records what went',
                 },
-                // The loudest thing Dwara can say. A human has to look.
-                // Only offer `dwara rollback` when there is something for it
-                // to put back. A units-only snapshot holds no files, and
-                // sending someone to a command that cannot help wastes the one
-                // moment they most need a straight answer.
-                hint:
-                  snapshot === undefined || snapshot.paths.length === 0
-                    ? 'this host needs a human; Dwara changed it and could not put it back'
-                    : `this host needs a human. Try: dwara rollback ${snapshot.id}`,
-              },
-            );
+              )
+            : new DwaraError(
+                'ROLLBACK_FAILED',
+                `${name} did not work and could not be undone: ${summariseVerify(verify)}. Rollback: ${rollback.detail}`,
+                {
+                  details: {
+                    tool: name,
+                    host,
+                    ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+                  },
+                  // The loudest thing Dwara can say. A human has to look.
+                  // Only offer `dwara rollback` when there is something for it
+                  // to put back. A units-only snapshot holds no files, and
+                  // sending someone to a command that cannot help wastes the one
+                  // moment they most need a straight answer.
+                  hint:
+                    snapshot === undefined || snapshot.paths.length === 0
+                      ? 'this host needs a human; Dwara changed it and could not put it back'
+                      : `this host needs a human. Try: dwara rollback ${snapshot.id}`,
+                },
+              );
 
         await this.write({
           tool,
@@ -439,6 +455,16 @@ export class Pipeline {
     snapshot: SnapshotRef | undefined,
     ctx: Ctx,
   ): Promise<RollbackOutcome> {
+    // A tool that declares itself unrestorable has nothing to attempt. Saying
+    // so plainly beats running an empty rollback and calling it a success.
+    if (!tool.restorable) {
+      return {
+        attempted: false,
+        ok: false,
+        detail: 'this change cannot be undone; the snapshot records what it removed',
+      };
+    }
+
     const notes: string[] = [];
     let ok = true;
 

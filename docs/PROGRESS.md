@@ -198,6 +198,30 @@ immediately records a snapshot of a moment that never settled.
 
 454 unit tests, 82 integration.
 
+**Task 8 — `rotate_logs` (2026-09-29).** `feat(tools)`.
+
+The tool the `disk-full-logs` scenario needs, and the first one that **cannot be undone**. Nine
+integration tests against `lab-api`, whose /var/log is a bounded 128 MB tmpfs — the only place in the
+lab a disk can really be filled.
+
+- **`restorable: false` is a new signal on `ToolDef`.** Without it a failed verification would run an
+  empty rollback, find nothing wrong, and report "the host is back as it was" — the same false claim
+  `confirmUnits` was added to prevent. With it the result says the change stands and points at the
+  snapshot for what went. Still `VERIFY_FAILED`, not `ROLLBACK_FAILED`: nothing went wrong with the undo
+  because there was never one to attempt.
+- **It truncates rather than deletes.** Unlinking would leave the writer appending to a deleted inode:
+  the space stays allocated until that service restarts, so `df` never moves while everything reports
+  success. A test pins the inode across the call.
+- **`logrotate` is gone from the lab image again.** It was installed in Task 5 for this tool and turned
+  out to be the wrong instrument — it only touches files it already has a config for, and those are not
+  the ones that fill disks. Removed rather than left as dead configuration, along with its sudoers rule.
+
+Two fixture lessons: `defaultTimeoutMs` on the transport is **never consulted**, because every command
+Dwara builds sets its own `timeoutMs` — a timeout test has to go through the tool's option. And a tmpfs
+at 99% still accepts an empty `touch`, so writability has to be asserted in bytes rather than probed.
+
+467 unit tests, 91 integration.
+
 ## Done
 
 **Repo setup**

@@ -62,8 +62,13 @@ Cmnd_Alias DWARA_RETAIN = /usr/bin/find /var/lib/dwara/snapshots -mindepth 1 -ma
                           /usr/bin/find /var/lib/dwara/snapshots -mindepth 1 -maxdepth 1 -type d -mtime * -exec rm -rf {} +, \
                           /usr/bin/find /var/lib/dwara/snapshots -mindepth 1 -maxdepth 1 -type d -name * -exec rm -rf {} +
 
-# rotate_logs.
-Cmnd_Alias DWARA_ROTATE = /usr/sbin/logrotate -f *, /usr/sbin/logrotate -s * -f *
+# rotate_logs. One file per invocation, so the rule can pin the directory --
+# the same reason the snapshot copies one file per `cp`.
+#
+# No logrotate rule: the tool does not use it. logrotate only acts on files it
+# already has a configuration for, and a file with a working rule is rarely the
+# one that filled the disk; the runaway writer nobody configured is.
+Cmnd_Alias DWARA_ROTATE = /usr/bin/truncate -s 0 -- /var/log/*
 
 dwara ALL=(root) NOPASSWD: DWARA_SYSTEMD, DWARA_LOGS, DWARA_INSPECT, DWARA_AUDIT, DWARA_READCONF, \
                            DWARA_SNAPSHOT, DWARA_RETAIN, DWARA_ROTATE

@@ -214,6 +214,49 @@ export function httpResponds(check: HttpCheck): Check {
 }
 
 /**
+ * A filesystem with room to write again.
+ *
+ * The postcondition for anything that frees space, and the one that matters to
+ * the services on the box: a log writer does not care how many megabytes came
+ * back, only whether its next append succeeds. Expressed as headroom rather
+ * than as "more free than before" so it stays true on a re-run, when there is
+ * nothing left to free and the tool has correctly done nothing.
+ */
+export function filesystemHasHeadroom(path: string, minFreePercent = 2): Check {
+  return {
+    name: `filesystem holding ${path} has room`,
+    async run(ctx) {
+      const result = await ctx.run({
+        argv: ['df', '--output=pcent,avail,target', '--', path],
+        sudo: true,
+        timeoutMs: CHECK_TIMEOUT_MS,
+      });
+
+      // Header first, then one row. `pcent` arrives as e.g. " 21%".
+      const row = result.stdout.trim().split('\n')[1];
+      const fields = (row ?? '').trim().split(/\s+/);
+      const used = Number((fields[0] ?? '').replace('%', ''));
+      const availKb = Number(fields[1]);
+
+      if (!Number.isFinite(used)) {
+        return { ok: false, detail: `could not read free space for ${path}` };
+      }
+
+      const free = 100 - used;
+      return free >= minFreePercent
+        ? {
+            ok: true,
+            detail: `${fields[2] ?? path} is ${used}% used, ${Math.round(availKb / 1024)} MB free`,
+          }
+        : {
+            ok: false,
+            detail: `${fields[2] ?? path} is still ${used}% used; writes there will keep failing`,
+          };
+    },
+  };
+}
+
+/**
  * A service's own configuration validator, such as `nginx -t`.
  *
  * Runs once and is not retried on failure: a config file that is invalid now

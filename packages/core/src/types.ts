@@ -201,6 +201,19 @@ export interface ToolDef<I, O> {
   verify?(input: I, ctx: Ctx): Promise<VerifyResult>;
   /** Required for reversible and config tools. */
   rollback?(snapshot: SnapshotRef): readonly RemoteCommand[];
+  /**
+   * False when the change genuinely cannot be undone.
+   *
+   * Freeing disk space is the honest case: you cannot back up the thing you
+   * are deleting onto the filesystem you are emptying, so the snapshot is a
+   * record of what went rather than a copy of it. Such a tool still declares
+   * `snapshot`, `verify` and `rollback` — the registry requires them — but its
+   * rollback has no commands to give.
+   *
+   * The pipeline reads this so that a failed verification does not tell anyone
+   * the host is back as it was when it is not. Defaults to true.
+   */
+  readonly restorable?: boolean;
   /** Output cap for this tool, if it differs from the transport default. */
   readonly maxOutputBytes?: number;
 }

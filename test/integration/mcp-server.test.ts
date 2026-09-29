@@ -85,6 +85,7 @@ describeTestbed('dwara MCP server', () => {
     expect(tools.filter((tool) => tool.name.startsWith('reversible_')).map((t) => t.name)).toEqual([
       'reversible_restart_service',
       'reversible_restart_container',
+      'reversible_rotate_logs',
     ]);
     expect(tools.map((t) => t.name).sort()).toEqual([...toolNames].sort());
   });

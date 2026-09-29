@@ -28,6 +28,8 @@ export type {
   RestartContainerOptions,
   RestartContainerResult,
 } from './restart-container.js';
+export { createRotateLogs, rotateLogs } from './rotate-logs.js';
+export type { RotateLogsOptions, RotateLogsResult, RotatedFile } from './rotate-logs.js';
 
 export { DENIED_PATHS, DEFAULT_CONFIG_PATHS, DEFAULT_LOG_PATHS, guardPath } from './paths.js';
 
@@ -44,6 +46,7 @@ import { readConfig } from './read-config.js';
 import { securityAudit } from './security-audit.js';
 import { restartService } from './restart-service.js';
 import { restartContainer } from './restart-container.js';
+import { rotateLogs } from './rotate-logs.js';
 
 /**
  * A registry holding every tool in this release.
@@ -68,6 +71,7 @@ export function createRegistry(): ToolRegistry {
 
   registry.register(restartService);
   registry.register(restartContainer);
+  registry.register(rotateLogs);
 
   return registry;
 }

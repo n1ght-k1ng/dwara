@@ -42,6 +42,8 @@ export interface RegisteredTool {
   readonly inputSchema: z.ZodType;
   /** True for a tool that changes remote state. */
   readonly mutates: boolean;
+  /** False for a change that cannot be undone, such as freeing disk space. */
+  readonly restorable: boolean;
 
   validate(args: unknown): ValidationResult;
   /** Undefined for a tool that sequences its own commands through `apply`. */
@@ -77,6 +79,7 @@ function erase<I, O>(tool: ToolDef<I, O>): RegisteredTool {
     maxOutputBytes: tool.maxOutputBytes,
     inputSchema: tool.input,
     mutates: tool.risk === Risk.Reversible || tool.risk === Risk.Config,
+    restorable: tool.restorable !== false,
 
     validate(args) {
       const parsed = tool.input.safeParse(args);
