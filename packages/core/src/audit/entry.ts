@@ -41,6 +41,12 @@ export const auditEntrySchema = z
     result: z.enum(['ok', 'verified', 'rolled_back', 'failed', 'refused', 'error']),
     /** Snapshot taken before a mutation, so `dwara rollback` can find it. */
     snapshot: z.string().optional(),
+    /**
+     * The approval that authorised this action, or the request raised when one
+     * was needed and none existed. Either way it ties the entry to a human
+     * decision, which is the point of recording it.
+     */
+    approval: z.string().optional(),
     /** Short, redacted summary — never the tool's output. */
     detail: z.string().default(''),
     duration_ms: z.number().int().nonnegative().default(0),

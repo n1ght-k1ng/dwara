@@ -12,6 +12,8 @@ import {
   SshTransport,
   loadPolicy,
   parseSshConfig,
+  DEFAULT_APPROVAL_DIR,
+  FileApprovalStore,
   type RegisteredTool,
 } from '@dwara/core';
 import { createRegistry } from '@dwara/tools';
@@ -25,6 +27,8 @@ export interface ServerOptions {
   readonly auditPath?: string;
   /** Directory of markdown runbooks to expose as resources. */
   readonly runbooksPath?: string;
+  /** Where human approvals are read from. Defaults to `.dwara`. */
+  readonly approvalDir?: string;
   /** Recorded in audit entries. */
   readonly agent?: string;
 }
@@ -50,6 +54,11 @@ export interface BuiltServer {
  * and hand the model anything that has not been through the redactor (rule 6).
  * There is no approval tool here, and no path that returns a payload the
  * pipeline did not produce.
+ *
+ * It does hand the pipeline an approval store, and that is not a contradiction:
+ * the store can find, spend and record a request for an approval, and has no
+ * method that creates one. Granting lives in a module this package does not
+ * import, and a test asserts it never starts.
  */
 export async function buildServer(options: ServerOptions = {}): Promise<BuiltServer> {
   const policyPath = options.policyPath ?? DEFAULT_POLICY_PATH;
@@ -70,6 +79,10 @@ export async function buildServer(options: ServerOptions = {}): Promise<BuiltSer
     registry,
     audit,
     redactor,
+    // Read and spend only. Nothing here can create an approval: granting lives
+    // in `approval/grant.ts`, which this package does not import, and a tool's
+    // single capability is `Ctx.run` against a remote host.
+    approvals: new FileApprovalStore({ dir: options.approvalDir ?? DEFAULT_APPROVAL_DIR }),
   });
 
   const server = new McpServer(

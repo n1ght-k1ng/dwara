@@ -101,6 +101,20 @@ export type { ChainReport, ChainProblem } from './audit/verify.js';
 export { auditEntrySchema, canonicalise, hashEntry, GENESIS_HASH } from './audit/entry.js';
 export type { AuditEntry, AuditInput } from './audit/entry.js';
 
+export {
+  DEFAULT_APPROVAL_DIR,
+  DEFAULT_TTL_MS,
+  FileApprovalStore,
+  approvalRequestSchema,
+  approvalSchema,
+  isRequestId,
+  newRequestId,
+  planHash,
+} from './approval/store.js';
+export type { Approval, ApprovalRequest, ApprovalStore } from './approval/store.js';
+export { grantApproval } from './approval/grant.js';
+export type { GrantOptions } from './approval/grant.js';
+
 export { Session } from './session.js';
 export { ToolRegistry, mcpName } from './registry.js';
 export type { RegisteredTool, ValidationResult } from './registry.js';

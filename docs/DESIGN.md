@@ -400,3 +400,19 @@ for. The restriction lives in the tool's argv rather than in the lab's sudoers, 
 there: the `dwara` user is in the `docker` group, so a sudoers rule would be decoration — the same
 command succeeds without it. `olderThan` is the only caller-supplied argument and is constrained to a
 plain duration by the schema and re-checked before use, so there is no input that can add a flag.
+
+2026-09-29 — **An approval is bound to a plan hash over the tool, the host and every argument, and is
+good for exactly one action.** Reason: approving "restart nginx on lab-api" must not approve restarting
+something else, on another host, or the same thing twice. A hash over the canonicalised action gives
+all three for free: an agent that changes one character after asking gets a different hash and is
+refused, and spending the approval before the action runs closes the window in which a second call
+could reuse it. Spending it *before* rather than after is deliberate — if the process dies midway the
+approval is gone and a human grants another, which is the safe direction to fail.
+
+2026-09-29 — **Rule 5 rests on `Ctx`, not on module boundaries.** Reason: the real guarantee that an
+agent cannot approve its own action is that a tool is handed exactly one capability — `run(command)`,
+which reaches a remote host — and has no local filesystem path at all. Keeping `grantApproval` in a
+module the agent-facing packages do not import is defence in depth on top of that, and is checked by a
+test that strips comments first so prose about the rule cannot trip the rule. The MCP server does
+construct an approval store, which is not a contradiction: that interface can find, spend and record a
+request, and has no method that brings an approval into being.

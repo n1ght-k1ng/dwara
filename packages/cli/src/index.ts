@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { DwaraError } from '@dwara/core';
+import { approve, listPending } from './approve.js';
 import { formatReport, runDoctor } from './doctor.js';
 
 /** Package identifier, recorded in audit entries so each one names its build. */
@@ -13,6 +14,8 @@ export const VERSION = '0.0.0' as const;
 
 export { runDoctor, formatReport } from './doctor.js';
 export type { DoctorReport, DoctorOptions, HostReport, Check } from './doctor.js';
+export { approve, formatRequest, listPending } from './approve.js';
+export type { ApproveOptions, ApproveResult } from './approve.js';
 
 /** Builds the CLI. Exported so tests can drive it without spawning a process. */
 export function buildProgram(): Command {
@@ -45,6 +48,37 @@ export function buildProgram(): Command {
         console.log(formatReport(report, process.stdout.isTTY === true));
         // A non-zero exit is what makes this usable in CI and in `init`.
         process.exitCode = report.ok ? 0 : 1;
+      },
+    );
+
+  program
+    .command('approve')
+    .argument('[id]', 'request id, as the agent reported it')
+    .description('approve one pending action, after reading what it would do')
+    .option('-d, --dir <path>', 'where approvals live', '.dwara')
+    .option('--list', 'show what is waiting instead of approving')
+    .option('--ttl <minutes>', 'how long the approval stays valid', '15')
+    .option('-y, --yes', 'skip the confirmation prompt')
+    .action(
+      async (
+        id: string | undefined,
+        options: { dir: string; list?: boolean; ttl: string; yes?: boolean },
+      ) => {
+        if (options.list === true || id === undefined) {
+          console.log(await listPending(options.dir));
+          return;
+        }
+
+        const result = await approve(id, {
+          dir: options.dir,
+          ttlMs: Number(options.ttl) * 60_000,
+          ...(options.yes === true ? { yes: true } : {}),
+        });
+
+        console.log(result.text);
+        // Declining is a decision, not a failure, but the exit code has to
+        // distinguish them for anything scripting this.
+        process.exitCode = result.ok ? 0 : 1;
       },
     );
 

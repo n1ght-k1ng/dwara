@@ -9,6 +9,13 @@ import type { RegisteredTool, ToolRegistry } from './registry.js';
 import { confirmRestored, createSnapshot, restoreSnapshot } from './snapshot/manager.js';
 import { pruneSnapshots } from './snapshot/retention.js';
 import { summariseVerify } from './verify/run.js';
+import {
+  newRequestId,
+  planHash,
+  type Approval,
+  type ApprovalRequest,
+  type ApprovalStore,
+} from './approval/store.js';
 import type { Session } from './session.js';
 import type { SshConfig } from './ssh/config.js';
 import type {
@@ -35,6 +42,13 @@ export interface PipelineOptions {
   readonly registry: ToolRegistry;
   readonly audit: AuditLog;
   readonly redactor?: Redactor;
+  /**
+   * Where human approvals are read from.
+   *
+   * Without one, a policy that requires approval simply refuses — which is what
+   * Phase 2 did, and is still the correct answer when no approval flow exists.
+   */
+  readonly approvals?: ApprovalStore;
 }
 
 /**
@@ -131,21 +145,50 @@ export class Pipeline {
       });
     }
 
-    // 4 · Approval. Nothing reachable from here can grant one — no MCP tool may
-    // create approvals (CLAUDE.md rule 5), and the CLI flow arrives in Phase 4.
-    // Until then the honest answer is to stop and say what is needed.
+    // 4 · Approval. Nothing reachable from here can grant one: no MCP tool may
+    // create approvals (CLAUDE.md rule 5), and a tool's only capability is
+    // `Ctx.run`, which reaches a remote host and cannot write a local file.
+    // What the pipeline may do is spend an approval a human already granted.
+    let approval: Approval | undefined;
+
     if (decision.kind === 'approval') {
-      return this.refuse({
-        tool,
-        name,
-        host,
-        session,
-        startedAt,
-        decision,
-        input,
-        result: 'refused',
-        code: 'APPROVAL_REQUIRED',
-      });
+      const hash = planHash({ tool: tool.name, host, input });
+      approval = await this.options.approvals?.find(hash);
+
+      if (approval === undefined) {
+        // Record what was asked for, so `dwara approve` can show a person the
+        // arguments rather than an opaque id. A request is not permission.
+        const request: ApprovalRequest = {
+          id: newRequestId(),
+          plan_hash: hash,
+          tool: name,
+          host,
+          risk: tool.risk,
+          input: this.redactor.redactDeep(input) as Record<string, unknown>,
+          reason: decision.reason,
+          created_at: new Date().toISOString(),
+        };
+        await this.options.approvals?.record(request);
+
+        return this.refuse({
+          tool,
+          name,
+          host,
+          session,
+          startedAt,
+          decision,
+          input,
+          result: 'refused',
+          code: 'APPROVAL_REQUIRED',
+          request,
+        });
+      }
+
+      // Spent before the action runs, not after. If the process dies midway the
+      // approval is gone, which is the safe direction to fail: a human grants
+      // another. Spending it afterwards would leave a window in which the same
+      // approval could authorise a second action.
+      await this.options.approvals?.consume(approval.id);
     }
 
     // 5 · Execute. From here the action has reached a host, so it counts
@@ -218,6 +261,7 @@ export class Pipeline {
         code: error.code,
         startedAt,
         ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+        ...(approval === undefined ? {} : { approval: approval.id }),
       });
 
       return {
@@ -348,6 +392,7 @@ export class Pipeline {
           code: error.code,
           startedAt,
           ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+          ...(approval === undefined ? {} : { approval: approval.id }),
         });
 
         return {
@@ -398,6 +443,7 @@ export class Pipeline {
         .join('; '),
       startedAt,
       ...(snapshot === undefined ? {} : { snapshot: snapshot.id }),
+      ...(approval === undefined ? {} : { approval: approval.id }),
     });
 
     return {
@@ -559,6 +605,7 @@ export class Pipeline {
     input: unknown;
     result: 'refused' | 'error';
     code?: string;
+    request?: ApprovalRequest;
   }): Promise<ToolResult<Envelope<unknown>>> {
     args.session.recordRefused();
 
@@ -569,6 +616,7 @@ export class Pipeline {
       ...args,
       detail: args.decision.reason,
       code,
+      ...(args.request === undefined ? {} : { approval: args.request.id }),
     });
 
     return {
@@ -579,9 +627,19 @@ export class Pipeline {
       error: {
         code: code as DwaraError['code'],
         message: args.decision.reason,
-        details: { rule: args.decision.rule },
+        details: {
+          rule: args.decision.rule,
+          ...(args.request === undefined
+            ? {}
+            : { approval_id: args.request.id, plan_hash: args.request.plan_hash }),
+        },
         ...(args.decision.kind === 'approval'
-          ? { hint: 'a human has to approve this; no tool can grant it' }
+          ? {
+              hint:
+                args.request === undefined
+                  ? 'a human has to approve this; no tool can grant it'
+                  : `a human has to approve this; no tool can grant it. Ask them to run: dwara approve ${args.request.id}`,
+            }
           : {}),
       },
       durationMs: Date.now() - args.startedAt,
@@ -600,6 +658,7 @@ export class Pipeline {
     code?: string;
     startedAt: number;
     snapshot?: string;
+    approval?: string;
   }): Promise<void> {
     await this.options.audit.append({
       session: args.session.id,
@@ -611,6 +670,7 @@ export class Pipeline {
       rule: args.decision.rule,
       ...(args.code === undefined ? {} : { code: args.code }),
       ...(args.snapshot === undefined ? {} : { snapshot: args.snapshot }),
+      ...(args.approval === undefined ? {} : { approval: args.approval }),
       input: asRecord(args.input),
       result: args.result,
       detail: args.detail ?? '',

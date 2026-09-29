@@ -244,6 +244,32 @@ time.
 
 479 unit tests, 99 integration.
 
+**Task 10 — plan-bound approvals (2026-09-29).** `feat(core)`, `feat(cli)`.
+
+Pulled forward from Phase 4, because `lab-api` requires a human for reversible work and the Phase 3
+exit criteria are unreachable without it. **This resolves the second thing Phase 2 left open.**
+
+- An approval is bound to a **plan hash** over the tool, the host and every argument, and is good for
+  **one** action. Changing an argument after asking, using it twice, using it on another host, or using
+  it after it expires all fail. Seven integration tests run against the **committed** lab policy rather
+  than a relaxed copy — the only suite that does.
+- It is spent **before** the action runs. If the process dies midway the approval is gone and a person
+  grants another, which is the safe direction to fail; spending it afterwards would leave a window.
+- An approval is not a policy override: a `deny` still denies, and no request is even recorded.
+- Without a store configured the pipeline refuses, as Phase 2 did. Fail closed.
+- `dwara approve <id>` prints the full plan before asking, because an approval bound to a hash is
+  worthless if the person granting it could not see what the plan was. `--list` shows what is waiting.
+- The audit entry for the refusal and for the action that follows carry the **same** approval id, so the
+  log ties the change to the human decision that permitted it.
+
+**Rule 5 is tested structurally.** The real guarantee is the shape of `Ctx`: a tool gets one capability,
+`run(command)`, aimed at a remote host, and has no local filesystem path at all. Keeping `grantApproval`
+in a module the agent-facing packages never import is defence in depth on top of that. The test strips
+comments before scanning — the first version failed because a comment *explaining* the rule contained
+the string it was grepping for.
+
+523 unit tests, 106 integration.
+
 ## Done
 
 **Repo setup**

@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { AuditLog } from './audit/log.js';
 import { verifyChain } from './audit/verify.js';
 import { DwaraError } from './errors.js';
+import { grantApproval } from './approval/grant.js';
+import { FileApprovalStore } from './approval/store.js';
 import { Pipeline, type CommandRunner } from './pipeline.js';
 import { parsePolicy } from './policy/load.js';
 import { ToolRegistry } from './registry.js';
@@ -734,6 +736,214 @@ describe('Pipeline transactional execution', () => {
     expect(entries[1]?.result).toBe('rolled_back');
     expect(entries[0]?.snapshot).toMatch(/^snap_/);
     expect((await verifyChain(entries)).ok).toBe(true);
+  });
+});
+
+describe('Pipeline approvals', () => {
+  /** The lab-api shape: reversible needs a human. */
+  const APPROVAL_POLICY = `
+version: 1
+defaults:
+  allow: [read]
+  require_approval: [reversible, config]
+  deny: [destructive]
+hosts:
+  - match: "lab-*"
+    require_approval: [reversible, config]
+limits:
+  max_actions_per_session: 5
+  max_hosts_per_action: 1
+`;
+
+  const ARGS = { host: 'lab-api', unit: 'thing' };
+
+  function withApprovals(runner: CommandRunner, approvals: FileApprovalStore): Pipeline {
+    const registry = new ToolRegistry();
+    registry.register(mutatingTool({ verifyOk: true }));
+
+    return new Pipeline({
+      policy: parsePolicy(APPROVAL_POLICY),
+      sshConfig: SSH_CONFIG,
+      runner,
+      registry,
+      audit,
+      approvals,
+    });
+  }
+
+  let store: FileApprovalStore;
+
+  beforeEach(() => {
+    store = new FileApprovalStore({ dir });
+  });
+
+  it('stops without an approval, and names the command a human should run', async () => {
+    const runner = snapshotRunner();
+    const result = await withApprovals(runner, store).execute('restart_thing', ARGS, new Session());
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('APPROVAL_REQUIRED');
+    expect(result.error?.hint).toMatch(/dwara approve apr_[0-9a-f]{8}/);
+    expect(runner.calls).toHaveLength(0);
+
+    // The request is recorded so a person can read the arguments, but a
+    // request is not permission and nothing has been granted.
+    const pending = await store.pending();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.input).toMatchObject(ARGS);
+    expect(await store.all()).toEqual([]);
+  });
+
+  it('proceeds once a human has granted the approval', async () => {
+    const first = await withApprovals(snapshotRunner(), store).execute(
+      'restart_thing',
+      ARGS,
+      new Session(),
+    );
+    const pending = (await store.pending())[0]!;
+    expect(first.ok).toBe(false);
+
+    await grantApproval(store, pending);
+
+    const runner = snapshotRunner();
+    const second = await withApprovals(runner, store).execute('restart_thing', ARGS, new Session());
+
+    expect(second.ok).toBe(true);
+    expect(runner.calls.length).toBeGreaterThan(0);
+  });
+
+  it('refuses a second identical action on one approval', async () => {
+    await withApprovals(snapshotRunner(), store).execute('restart_thing', ARGS, new Session());
+    await grantApproval(store, (await store.pending())[0]!);
+
+    const first = await withApprovals(snapshotRunner(), store).execute(
+      'restart_thing',
+      ARGS,
+      new Session(),
+    );
+    const runner = snapshotRunner();
+    const second = await withApprovals(runner, store).execute('restart_thing', ARGS, new Session());
+
+    expect(first.ok).toBe(true);
+    // An approval authorises one action. Replaying it would let one "yes"
+    // restart a service as many times as the agent liked.
+    expect(second.ok).toBe(false);
+    expect(second.error?.code).toBe('APPROVAL_REQUIRED');
+    expect(runner.calls).toHaveLength(0);
+  });
+
+  it('refuses an approval that has expired', async () => {
+    let clock = new Date('2026-09-29T10:00:00.000Z');
+    const timed = new FileApprovalStore({ dir, now: () => clock });
+
+    await withApprovals(snapshotRunner(), timed).execute('restart_thing', ARGS, new Session());
+    await grantApproval(timed, (await timed.pending())[0]!, { ttlMs: 60_000, now: () => clock });
+
+    clock = new Date('2026-09-29T11:00:00.000Z');
+    const runner = snapshotRunner();
+    const result = await withApprovals(runner, timed).execute('restart_thing', ARGS, new Session());
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('APPROVAL_REQUIRED');
+    expect(runner.calls).toHaveLength(0);
+  });
+
+  it('refuses when the agent changes the plan after asking', async () => {
+    // The attack the binding exists for: ask to restart one unit, get a yes,
+    // then apply it to another.
+    await withApprovals(snapshotRunner(), store).execute('restart_thing', ARGS, new Session());
+    await grantApproval(store, (await store.pending())[0]!);
+
+    const runner = snapshotRunner();
+    const result = await withApprovals(runner, store).execute(
+      'restart_thing',
+      { host: 'lab-api', unit: 'something-else' },
+      new Session(),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('APPROVAL_REQUIRED');
+    expect(runner.calls).toHaveLength(0);
+  });
+
+  it('refuses an approval granted for a different host', async () => {
+    await withApprovals(snapshotRunner(), store).execute('restart_thing', ARGS, new Session());
+    await grantApproval(store, (await store.pending())[0]!);
+
+    const runner = snapshotRunner();
+    const result = await withApprovals(runner, store).execute(
+      'restart_thing',
+      { host: 'lab-db', unit: 'thing' },
+      new Session(),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(runner.calls).toHaveLength(0);
+  });
+
+  it('still refuses when policy denies, approval or not', async () => {
+    // An approval is permission from a human, not an override of the policy.
+    const denied = `
+version: 1
+defaults:
+  allow: [read]
+  deny: [reversible, config, destructive]
+hosts:
+  - match: "lab-*"
+    deny: [reversible]
+limits:
+  max_actions_per_session: 5
+  max_hosts_per_action: 1
+`;
+    const registry = new ToolRegistry();
+    registry.register(mutatingTool({ verifyOk: true }));
+    const runner = snapshotRunner();
+
+    const result = await new Pipeline({
+      policy: parsePolicy(denied),
+      sshConfig: SSH_CONFIG,
+      runner,
+      registry,
+      audit,
+      approvals: store,
+    }).execute('restart_thing', ARGS, new Session());
+
+    expect(result.error?.code).toBe('DENIED_BY_POLICY');
+    expect(await store.pending()).toEqual([]);
+    expect(runner.calls).toHaveLength(0);
+  });
+
+  it('records the approval in the audit entry that spent it', async () => {
+    await withApprovals(snapshotRunner(), store).execute('restart_thing', ARGS, new Session());
+    const pending = (await store.pending())[0]!;
+    await grantApproval(store, pending);
+    await withApprovals(snapshotRunner(), store).execute('restart_thing', ARGS, new Session());
+
+    const entries = await audit.read();
+    // Both the refusal and the action that followed name the same id, so the
+    // log ties the change to the human decision that permitted it.
+    expect(entries[0]).toMatchObject({ result: 'refused', approval: pending.id });
+    expect(entries[1]).toMatchObject({ result: 'verified', approval: pending.id });
+    expect((await verifyChain(entries)).ok).toBe(true);
+  });
+
+  it('refuses without an approval store at all, rather than proceeding', async () => {
+    const registry = new ToolRegistry();
+    registry.register(mutatingTool({ verifyOk: true }));
+    const runner = snapshotRunner();
+
+    const result = await new Pipeline({
+      policy: parsePolicy(APPROVAL_POLICY),
+      sshConfig: SSH_CONFIG,
+      runner,
+      registry,
+      audit,
+    }).execute('restart_thing', ARGS, new Session());
+
+    // Fail closed. No store configured means no approval can exist.
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('APPROVAL_REQUIRED');
+    expect(runner.calls).toHaveLength(0);
   });
 });
 
