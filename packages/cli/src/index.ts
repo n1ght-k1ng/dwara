@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { DwaraError } from '@dwara/core';
 import { approve, listPending } from './approve.js';
+import { formatAudit, verifyAudit } from './audit.js';
 import { listHostSnapshots, rollback } from './rollback.js';
 import { formatReport, runDoctor } from './doctor.js';
 
@@ -17,6 +18,8 @@ export { runDoctor, formatReport } from './doctor.js';
 export type { DoctorReport, DoctorOptions, HostReport, Check } from './doctor.js';
 export { approve, formatRequest, listPending } from './approve.js';
 export { hostForSnapshot, listHostSnapshots, rollback } from './rollback.js';
+export { formatAudit, readAudit, verifyAudit } from './audit.js';
+export type { AuditOptions, VerifyReport } from './audit.js';
 export type { RollbackOptions, RollbackReport } from './rollback.js';
 export type { ApproveOptions, ApproveResult } from './approve.js';
 
@@ -120,6 +123,45 @@ export function buildProgram(): Command {
         process.exitCode = report.ok ? 0 : 1;
       },
     );
+
+  const audit = program
+    .command('audit')
+    .description('read the audit log, or check that it has not been tampered with')
+    .option('-f, --file <path>', 'audit log to read', '.dwara/audit.jsonl')
+    .option('--host <alias>', 'only this host')
+    .option('--tool <name>', 'only this tool')
+    .option('--changes', 'only actions that changed something, or tried to')
+    .option('-n, --limit <count>', 'show only the last N entries')
+    .action(
+      async (options: {
+        file: string;
+        host?: string;
+        tool?: string;
+        changes?: boolean;
+        limit?: string;
+      }) => {
+        console.log(
+          await formatAudit({
+            file: options.file,
+            ...(options.host === undefined ? {} : { host: options.host }),
+            ...(options.tool === undefined ? {} : { tool: options.tool }),
+            ...(options.changes === true ? { mutationsOnly: true } : {}),
+            ...(options.limit === undefined ? {} : { limit: Number(options.limit) }),
+          }),
+        );
+      },
+    );
+
+  audit
+    .command('verify')
+    .description('check the hash chain end to end')
+    .option('-f, --file <path>', 'audit log to check', '.dwara/audit.jsonl')
+    .action(async (options: { file: string }) => {
+      const report = await verifyAudit(options.file);
+      console.log(report.text);
+      // Non-zero so this is usable in CI and in the eval harness.
+      process.exitCode = report.ok ? 0 : 1;
+    });
 
   return program;
 }

@@ -37,6 +37,9 @@ export async function main(): Promise<void> {
       ...(process.env['DWARA_RUNBOOKS'] === undefined
         ? {}
         : { runbooksPath: process.env['DWARA_RUNBOOKS'] }),
+      ...(process.env['DWARA_APPROVALS'] === undefined
+        ? {}
+        : { approvalDir: process.env['DWARA_APPROVALS'] }),
       ...(process.env['DWARA_AGENT'] === undefined ? {} : { agent: process.env['DWARA_AGENT'] }),
     });
 
