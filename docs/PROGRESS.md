@@ -363,6 +363,27 @@ Recorded rather than decided.
   mode is model-supplied input. Left as it is, deliberately; worth revisiting with a separate read-risk
   preview tool rather than by trusting an argument.
 
+### What reading the transcripts turned up
+
+- **The gate was contaminated, and Phase 5 must not be.** `claude -p` ran with the working directory
+  set to this repository, so `CLAUDE.md` and the recent git log went into the agent's context. It knew
+  Dwara's design and safety rules, offered to "open a task in the repo", and cited commit `f8cce4c`
+  while critiquing the approvals code. The diagnoses themselves came from tool output and look sound,
+  but a benchmark measuring whether an agent can operate infrastructure through these tools **cannot run
+  inside the tools' own source tree**. Phase 5's runner needs a neutral working directory.
+- **`tail_logs` cannot read a file whose last line is enormous.** The runaway log was one line of
+  roughly 390 KB with no newlines, so a `lines: 1` read filled the 64 KB transport cap with a fragment
+  and returned `truncated: true`. The cap did its job; the tool is simply unusable on that shape of
+  file, which is exactly the shape a runaway writer produces. It should cut long lines individually and
+  say so. Found by the agent, unprompted.
+- **`ToolDef.maxOutputBytes` is dead configuration.** It is declared in `types.ts`, erased into
+  `RegisteredTool`, **read by nothing and set by no tool**. The transport's global 64 KB cap is what
+  actually protects, so there is no hole — but this is the third thing this phase that looked like a
+  constraint and was none, after the `docker image prune` sudoers rule and the health-check URL. Either
+  wire it through to the transport or delete it.
+- The agent independently identified the double-approval problem and proposed the same two remedies
+  recorded above, which is some evidence the friction is real rather than theoretical.
+
 ### Harness notes for Phase 5
 
 - A break's `--check` needs **retrying**, not a fixed sleep: `systemctl reload nginx` leaves old workers
