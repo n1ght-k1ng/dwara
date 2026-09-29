@@ -391,3 +391,12 @@ indication says the fix worked. `logrotate` is not used because it acts only on 
 configuration for, and a file with a working rule is rarely the one that filled the disk; the runaway
 writer nobody configured is. It was installed in the lab image for this tool and has been removed again
 rather than left as dead configuration.
+
+2026-09-29 — **`prune_images` removes dangling images only, and the `-a` flag is never built.** Reason:
+`docker image prune -a` removes every image not currently used by a *running* container, which includes
+the previous release you would roll back to and every image a stopped container needs in order to start.
+That is a far larger action than reclaiming untagged layers, and it is not what an agent should reach
+for. The restriction lives in the tool's argv rather than in the lab's sudoers, because it cannot live
+there: the `dwara` user is in the `docker` group, so a sudoers rule would be decoration — the same
+command succeeds without it. `olderThan` is the only caller-supplied argument and is constrained to a
+plain duration by the schema and re-checked before use, so there is no input that can add a flag.

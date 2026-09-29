@@ -503,8 +503,9 @@ describe('the registry', () => {
       'restart_service',
       'restart_container',
       'rotate_logs',
+      'prune_images',
     ]);
-    expect(registry.size).toBe(14);
+    expect(registry.size).toBe(15);
   });
 
   it('prefixes every tool name with its risk class', () => {

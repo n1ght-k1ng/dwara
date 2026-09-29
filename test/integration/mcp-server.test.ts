@@ -86,6 +86,7 @@ describeTestbed('dwara MCP server', () => {
       'reversible_restart_service',
       'reversible_restart_container',
       'reversible_rotate_logs',
+      'reversible_prune_images',
     ]);
     expect(tools.map((t) => t.name).sort()).toEqual([...toolNames].sort());
   });

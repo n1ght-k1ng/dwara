@@ -222,6 +222,28 @@ at 99% still accepts an empty `touch`, so writability has to be asserted in byte
 
 467 unit tests, 91 integration.
 
+**Task 9 — `prune_images` (2026-09-29).** `feat(tools)`. Completes the reversible tools.
+
+Dangling images only; **the `-a` flag is never built**. `prune -a` removes every image not used by a
+running container — the previous release you would roll back to, and whatever stopped containers need
+to start. The restriction is in the tool's argv, not the lab's sudoers, because it cannot be in sudoers:
+docker group membership means a rule there would be decoration. `olderThan` is the only caller-supplied
+argument, constrained to a plain duration by the schema and re-checked before use.
+
+The test worth having is not in PLAN.md's matrix: **the tagged image and the image a running container
+depends on both survive**. That property matters more than the space reclaimed.
+
+Also records something users will hit: pruning four 324 MB images on the lab reclaimed **3.4 kB**,
+because their layers were shared with images that remained. The assessment says so rather than leaving
+the arithmetic to surprise someone.
+
+Creating dangling images for the test took three attempts, worth noting for later scenarios: the lab app
+image **cannot write to `/` during a build**, so the textbook `RUN touch` trick fails; a `LABEL`-only
+rebuild left nothing dangling under this daemon; `docker commit` with no repository name works every
+time.
+
+479 unit tests, 99 integration.
+
 ## Done
 
 **Repo setup**
