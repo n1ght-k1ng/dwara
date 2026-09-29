@@ -270,6 +270,37 @@ the string it was grepping for.
 
 523 unit tests, 106 integration.
 
+**Task 11 — `edit_config` (2026-09-29).** `feat(tools)`. The first `config`-risk tool.
+
+Snapshot, write, **validate**, reload, verify. The integration suite proves the case PLAN.md names: a
+diff that breaks nginx is caught by `nginx -t` and **never reloaded**, so the running process keeps the
+config it already has and `/health` answers 200 throughout.
+
+- **The diff is applied in-process, exactly, with no fuzz**, and the whole file is written over stdin.
+  `patch(1)` would place a drifted hunk nearby, which is a different change wearing the same plan hash.
+  18 unit tests on the applier alone; it is the security-relevant part.
+- **The plan hash covers the file's contents before the edit**, which the approval hash does not. A file
+  edited between planning and applying fails rather than being overwritten — tested by having another
+  "admin" append a line and confirming it survives.
+- **`/etc/ssh/**` cannot be edited at all.** `sshd -t` proves a file parses, not that you can still log
+  in, and Dwara reaches every host over SSH.
+- Redis has no config checker, so it gets restart-then-verify, per DESIGN.
+
+**Task 12 — `rollback` tool and `dwara rollback` (2026-09-29).** `feat(tools)`, `feat(cli)`.
+
+The command the snapshot design exists for: it assumes no session, no pipeline and no agent, only SSH
+access and the snapshot's own metadata on the host. It infers the host from the audit log so nobody has
+to remember it at the moment they least will.
+
+**The chaos case from PLAN.md passes**: the connection is killed mid-change and a fresh process restores
+from the snapshot that was already on the host.
+
+`meta.json` is treated as untrusted server output — parsed against a schema, required to claim the id
+that was asked for, and the host it names ignored in favour of the host it was read from. A test edits
+it to impersonate another snapshot and confirms the restore is refused.
+
+559 unit tests, 123 integration.
+
 ## Done
 
 **Repo setup**

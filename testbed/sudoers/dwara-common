@@ -51,7 +51,8 @@ Cmnd_Alias DWARA_SNAPSHOT = /usr/bin/mkdir -p -- /var/lib/dwara/snapshots/*,    
                             /usr/bin/cp --preserve=all --parents -- /var/log/* /var/lib/dwara/snapshots/*, \
                             /usr/bin/cp --preserve=all -- /var/lib/dwara/snapshots/* /etc/*, \
                             /usr/bin/cp --preserve=all -- /var/lib/dwara/snapshots/* /var/log/*, \
-                            /usr/bin/tee -- /var/lib/dwara/snapshots/*
+                            /usr/bin/tee -- /var/lib/dwara/snapshots/*, \
+                            /usr/bin/cat -- /var/lib/dwara/snapshots/*
 
 # Retention, written out in full rather than as `find /var/lib/dwara/snapshots *`.
 # A wildcard tail would permit `-exec rm -rf /etc {} +`, because find substitutes

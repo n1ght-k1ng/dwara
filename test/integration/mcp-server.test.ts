@@ -88,6 +88,10 @@ describeTestbed('dwara MCP server', () => {
       'reversible_rotate_logs',
       'reversible_prune_images',
     ]);
+    expect(tools.filter((tool) => tool.name.startsWith('config_')).map((t) => t.name)).toEqual([
+      'config_edit_config',
+      'config_rollback',
+    ]);
     expect(tools.map((t) => t.name).sort()).toEqual([...toolNames].sort());
   });
 

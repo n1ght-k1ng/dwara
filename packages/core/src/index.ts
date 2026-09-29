@@ -65,6 +65,7 @@ export {
   guardSnapshotPath,
   isSnapshotId,
   newSnapshotId,
+  readSnapshot,
   restoreSnapshot,
   snapshotDir,
 } from './snapshot/manager.js';

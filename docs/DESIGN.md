@@ -416,3 +416,26 @@ module the agent-facing packages do not import is defence in depth on top of tha
 test that strips comments first so prose about the rule cannot trip the rule. The MCP server does
 construct an approval store, which is not a contradiction: that interface can find, spend and record a
 request, and has no method that brings an approval into being.
+
+2026-09-29 — **A unified diff is applied in-process and the whole file is written out, exactly, with no
+fuzz.** Reason: `patch(1)` places a hunk near where it was aimed when the context has drifted, which is
+helpful for a person merging by hand and unacceptable here — a diff that lands somewhere other than
+where it was reviewed is a different change wearing the same plan hash. Applying it locally also means
+the result can be hashed, previewed and compared before anything is written, and removes `patch` from
+the remote requirement list; it is not installed on the lab images and is not being added.
+
+2026-09-29 — **`edit_config`'s plan hash covers the file's contents before the edit, not just the
+arguments.** Reason: the approval hash binds what a human said yes to; this binds the state of the
+world. A file changed between planning and applying — by another admin, by configuration management, by
+the service itself — fails with `PLAN_MISMATCH` rather than being overwritten by a result computed from
+something that is no longer there. The two hashes answer different questions and both are needed.
+
+2026-09-29 — **`edit_config` refuses `/etc/ssh/**`.** Reason: `sshd -t` proves a file parses; it does
+not prove you can still log in, and a syntactically perfect `AllowUsers` line is exactly how a machine
+is lost. Dwara reaches every host over SSH, so that failure takes the recovery path with it — the same
+reasoning that keeps `ssh` out of `restart_service`.
+
+2026-09-29 — **A snapshot's `meta.json` is untrusted server output like anything else.** Reason:
+`dwara rollback` reads it to learn what to restore, so a hand-edited file could otherwise aim a restore
+at another snapshot's paths. It is parsed against a schema, the id it claims must match the id asked
+for, and the host it names is ignored in favour of the host it was actually read from.

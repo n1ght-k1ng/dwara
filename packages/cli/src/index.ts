@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { DwaraError } from '@dwara/core';
 import { approve, listPending } from './approve.js';
+import { listHostSnapshots, rollback } from './rollback.js';
 import { formatReport, runDoctor } from './doctor.js';
 
 /** Package identifier, recorded in audit entries so each one names its build. */
@@ -15,6 +16,8 @@ export const VERSION = '0.0.0' as const;
 export { runDoctor, formatReport } from './doctor.js';
 export type { DoctorReport, DoctorOptions, HostReport, Check } from './doctor.js';
 export { approve, formatRequest, listPending } from './approve.js';
+export { hostForSnapshot, listHostSnapshots, rollback } from './rollback.js';
+export type { RollbackOptions, RollbackReport } from './rollback.js';
 export type { ApproveOptions, ApproveResult } from './approve.js';
 
 /** Builds the CLI. Exported so tests can drive it without spawning a process. */
@@ -79,6 +82,42 @@ export function buildProgram(): Command {
         // Declining is a decision, not a failure, but the exit code has to
         // distinguish them for anything scripting this.
         process.exitCode = result.ok ? 0 : 1;
+      },
+    );
+
+  program
+    .command('rollback')
+    .argument('[id]', 'snapshot id, e.g. snap_0a1b2c3d')
+    .description('restore a host to a snapshot, without the agent')
+    .option('-F, --ssh-config <path>', 'SSH config to use', '~/.ssh/config')
+    .option('--host <alias>', 'which host; inferred from the audit log when omitted')
+    .option('--audit <path>', 'audit log to look the host up in')
+    .option('--list', 'list the snapshots on --host instead of restoring')
+    .action(
+      async (
+        id: string | undefined,
+        options: { sshConfig: string; host?: string; audit?: string; list?: boolean },
+      ) => {
+        if (options.list === true) {
+          if (options.host === undefined) {
+            throw new DwaraError('INTERNAL', '--list needs --host');
+          }
+          console.log(await listHostSnapshots(options.host, { sshConfigPath: options.sshConfig }));
+          return;
+        }
+
+        if (id === undefined) {
+          throw new DwaraError('INTERNAL', 'give a snapshot id, or --list --host <host>');
+        }
+
+        const report = await rollback(id, {
+          sshConfigPath: options.sshConfig,
+          ...(options.host === undefined ? {} : { host: options.host }),
+          ...(options.audit === undefined ? {} : { auditPath: options.audit }),
+        });
+
+        console.log(report.text);
+        process.exitCode = report.ok ? 0 : 1;
       },
     );
 

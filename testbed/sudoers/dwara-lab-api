@@ -1,8 +1,13 @@
 # lab-api / lab-staging extras: nginx validation, reload, and config reads.
+# edit_config reads with `cat --` and writes the whole file with `tee --`,
+# so both forms are spelled out. The `--` matters: it is a separate argument
+# and a rule written without it does not match the command.
 Cmnd_Alias DWARA_NGINX = /usr/sbin/nginx -t,     \
                          /usr/sbin/nginx -T,     \
                          /usr/sbin/nginx -s reload, \
-                         /usr/bin/cat /etc/nginx/*
+                         /usr/bin/cat /etc/nginx/*, \
+                         /usr/bin/cat -- /etc/nginx/*, \
+                         /usr/bin/tee -- /etc/nginx/*
 
 dwara ALL=(root) NOPASSWD: DWARA_NGINX
 

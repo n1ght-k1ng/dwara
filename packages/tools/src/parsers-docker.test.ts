@@ -505,7 +505,11 @@ describe('the registry', () => {
       'rotate_logs',
       'prune_images',
     ]);
-    expect(registry.size).toBe(15);
+    expect(registry.byRisk('config' as never).map((tool) => tool.name)).toEqual([
+      'edit_config',
+      'rollback',
+    ]);
+    expect(registry.size).toBe(17);
   });
 
   it('prefixes every tool name with its risk class', () => {
@@ -521,7 +525,17 @@ describe('the registry', () => {
     for (const tool of createRegistry().list()) {
       if (!tool.mutates) continue;
       expect(
-        tool.snapshot({ host: 'h', unit: 'nginx', container: 'lab-app', paths: [], journal: true }),
+        tool.snapshot({
+          host: 'h',
+          unit: 'nginx',
+          container: 'lab-app',
+          paths: [],
+          journal: true,
+          path: '/etc/nginx/nginx.conf',
+          diff: '@@ -1 +1 @@\n-a\n+b\n',
+          mode: 'plan',
+          snapshot: 'snap_0a1b2c3d',
+        }),
         tool.name,
       ).toBeDefined();
       expect(tool.rollback, tool.name).toBeTypeOf('function');

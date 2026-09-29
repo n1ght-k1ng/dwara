@@ -32,6 +32,11 @@ export { createRotateLogs, rotateLogs } from './rotate-logs.js';
 export type { RotateLogsOptions, RotateLogsResult, RotatedFile } from './rotate-logs.js';
 export { createPruneImages, pruneImages } from './prune-images.js';
 export type { DanglingImage, PruneImagesOptions, PruneImagesResult } from './prune-images.js';
+export { UNEDITABLE_PATHS, createEditConfig, editConfig } from './edit-config.js';
+export type { EditConfigOptions, EditConfigResult } from './edit-config.js';
+export { applyDiff, parseDiff, summariseDiff } from './diff.js';
+export { createRollback, rollback } from './rollback.js';
+export type { RollbackOptions, RollbackResult } from './rollback.js';
 
 export { DENIED_PATHS, DEFAULT_CONFIG_PATHS, DEFAULT_LOG_PATHS, guardPath } from './paths.js';
 
@@ -50,6 +55,8 @@ import { restartService } from './restart-service.js';
 import { restartContainer } from './restart-container.js';
 import { rotateLogs } from './rotate-logs.js';
 import { pruneImages } from './prune-images.js';
+import { editConfig } from './edit-config.js';
+import { rollback } from './rollback.js';
 
 /**
  * A registry holding every tool in this release.
@@ -76,6 +83,9 @@ export function createRegistry(): ToolRegistry {
   registry.register(restartContainer);
   registry.register(rotateLogs);
   registry.register(pruneImages);
+
+  registry.register(editConfig);
+  registry.register(rollback);
 
   return registry;
 }

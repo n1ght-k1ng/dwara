@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { z } from 'zod';
 import { DwaraError } from '../errors.js';
 import { lexicalPathProblem, normalisePath, pathIsDenied } from '../paths.js';
 import type {
@@ -25,6 +26,36 @@ import type {
  *    restores exact file hashes" is a PLAN.md test, and it is only testable
  *    because the hashes are captured up front.
  */
+
+/** The subset of meta.json a restore needs. Extra fields are ignored. */
+const snapshotRefSchema = z.object({
+  id: z.string(),
+  host: z.string(),
+  createdAt: z.string(),
+  paths: z.array(z.string()).readonly(),
+  hashes: z.record(z.string(), z.string()),
+  units: z
+    .record(
+      z.string(),
+      z.object({
+        activeState: z.string(),
+        unitFileState: z.string(),
+        restarts: z.number().optional(),
+      }),
+    )
+    .optional(),
+  containers: z
+    .record(
+      z.string(),
+      z.object({
+        running: z.boolean(),
+        status: z.string(),
+        restartCount: z.number().optional(),
+        image: z.string(),
+      }),
+    )
+    .optional(),
+});
 
 /** Where snapshots live on every managed host. */
 export const SNAPSHOT_ROOT = '/var/lib/dwara/snapshots';
@@ -107,6 +138,92 @@ export function guardSnapshotPath(requested: string): string {
   }
 
   return path;
+}
+
+/**
+ * Reads a snapshot's metadata back off the host.
+ *
+ * This is what makes `dwara rollback <id>` work with no local state at all: the
+ * snapshot describes itself, on the machine it belongs to, so a restore is
+ * possible from a fresh checkout, a different laptop, or after the session that
+ * created it is long gone.
+ *
+ * The file is untrusted like any other server output — it is parsed against the
+ * schema and the id it claims must match the id asked for, so a hand-edited
+ * meta.json cannot redirect a restore at another snapshot's paths.
+ *
+ * @throws DwaraError `INTERNAL` when there is no such snapshot, or its
+ *   metadata cannot be read.
+ */
+export async function readSnapshot(id: string, ctx: Ctx): Promise<SnapshotRef> {
+  const dir = snapshotDir(id);
+  const result = await ctx.run(sudo(['cat', '--', `${dir}/meta.json`]));
+
+  if (result.exitCode !== 0) {
+    throw new DwaraError('INTERNAL', `no snapshot ${id} on ${ctx.host}: ${firstLine(result)}`, {
+      details: { snapshot: id, host: ctx.host },
+      hint: 'snapshots are kept for 7 days or the last 20 per host, whichever comes first',
+    });
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.stdout);
+  } catch {
+    throw new DwaraError('INTERNAL', `snapshot ${id} has unreadable metadata`, {
+      details: { snapshot: id, host: ctx.host },
+    });
+  }
+
+  const meta = snapshotRefSchema.safeParse(parsed);
+  if (!meta.success) {
+    throw new DwaraError('INTERNAL', `snapshot ${id} has metadata Dwara cannot use`, {
+      details: { snapshot: id, host: ctx.host, problems: meta.error.issues.map((i) => i.message) },
+    });
+  }
+  if (meta.data.id !== id) {
+    throw new DwaraError('INTERNAL', `snapshot ${id} claims to be ${meta.data.id}`, {
+      details: { asked: id, claimed: meta.data.id, host: ctx.host },
+    });
+  }
+
+  // The host it names is ignored in favour of the host it was read from: the
+  // file is data, and a copied snapshot must restore where it actually is.
+  const { units, containers, ...rest } = meta.data;
+
+  return {
+    ...rest,
+    host: ctx.host,
+    ...(units === undefined
+      ? {}
+      : {
+          units: Object.fromEntries(
+            Object.entries(units).map(([name, state]): [string, UnitState] => [
+              name,
+              {
+                activeState: state.activeState,
+                unitFileState: state.unitFileState,
+                restarts: state.restarts,
+              },
+            ]),
+          ),
+        }),
+    ...(containers === undefined
+      ? {}
+      : {
+          containers: Object.fromEntries(
+            Object.entries(containers).map(([name, state]): [string, ContainerSnapshot] => [
+              name,
+              {
+                running: state.running,
+                status: state.status,
+                restartCount: state.restartCount,
+                image: state.image,
+              },
+            ]),
+          ),
+        }),
+  };
 }
 
 /** What a restore put back, and what it could not. */

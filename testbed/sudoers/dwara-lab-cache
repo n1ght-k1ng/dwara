@@ -1,2 +1,6 @@
 # lab-cache extras: read Redis configuration.
-dwara ALL=(root) NOPASSWD: /usr/bin/cat /etc/redis/*
+# Redis has no config checker, so edit_config writes and then restarts it and
+# requires it to stay up -- restart-then-verify, per DESIGN.
+dwara ALL=(root) NOPASSWD: /usr/bin/cat /etc/redis/*, \
+                           /usr/bin/cat -- /etc/redis/*, \
+                           /usr/bin/tee -- /etc/redis/*
