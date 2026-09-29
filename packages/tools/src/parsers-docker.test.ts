@@ -501,8 +501,9 @@ describe('the registry', () => {
     expect(registry.byRisk('read' as never)).toHaveLength(11);
     expect(registry.byRisk('reversible' as never).map((tool) => tool.name)).toEqual([
       'restart_service',
+      'restart_container',
     ]);
-    expect(registry.size).toBe(12);
+    expect(registry.size).toBe(13);
   });
 
   it('prefixes every tool name with its risk class', () => {
@@ -517,7 +518,10 @@ describe('the registry', () => {
   it('gives every mutating tool the machinery it cannot be registered without', () => {
     for (const tool of createRegistry().list()) {
       if (!tool.mutates) continue;
-      expect(tool.snapshot({ host: 'h', unit: 'nginx' }), tool.name).toBeDefined();
+      expect(
+        tool.snapshot({ host: 'h', unit: 'nginx', container: 'lab-app' }),
+        tool.name,
+      ).toBeDefined();
       expect(tool.rollback, tool.name).toBeTypeOf('function');
     }
   });

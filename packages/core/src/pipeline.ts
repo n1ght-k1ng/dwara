@@ -6,7 +6,7 @@ import type { LoadedPolicy } from './policy/load.js';
 import { selectHostRules } from './policy/match.js';
 import { defaultRedactor, type Redactor } from './redact/redact.js';
 import type { RegisteredTool, ToolRegistry } from './registry.js';
-import { confirmUnits, createSnapshot, restoreSnapshot } from './snapshot/manager.js';
+import { confirmRestored, createSnapshot, restoreSnapshot } from './snapshot/manager.js';
 import { pruneSnapshots } from './snapshot/retention.js';
 import { summariseVerify } from './verify/run.js';
 import type { Session } from './session.js';
@@ -157,13 +157,24 @@ export class Pipeline {
     // believing in a restore point that does not exist.
     let snapshot: SnapshotRef | undefined;
     if (tool.mutates) {
-      const spec = tool.snapshot(validated);
       try {
-        // The registry refuses to accept a mutating tool with no snapshot(),
-        // so a missing spec here would be a bug in this file, not in the tool.
-        snapshot = await createSnapshot(spec ?? { paths: [] }, this.context(host, session));
+        // `snapshot()` is inside the try because a tool may guard its arguments
+        // there, and that is the right place for it -- a refusal raised while
+        // describing what to back up happens before anything reaches the host.
+        // It must still come back as a typed result: CLAUDE.md is explicit that
+        // tools never throw raw errors at the MCP layer.
+        //
+        // The registry refuses a mutating tool with no snapshot(), so a missing
+        // spec here would be a bug in this file rather than in the tool.
+        const spec = tool.snapshot(validated) ?? { paths: [] };
+        snapshot = await createSnapshot(spec, this.context(host, session));
       } catch (err) {
         const error = DwaraError.from(err, 'SNAPSHOT_FAILED');
+        // A tool that refused its own arguments keeps its code and its wording:
+        // "cannot snapshot" would be the wrong thing to tell someone who asked
+        // to restart a container Dwara will not touch.
+        const refused = error.code !== 'SNAPSHOT_FAILED';
+
         await this.write({
           tool,
           name,
@@ -171,8 +182,8 @@ export class Pipeline {
           session,
           decision,
           input,
-          result: 'error',
-          detail: `nothing was changed: ${error.message}`,
+          result: refused ? 'refused' : 'error',
+          detail: refused ? error.message : `nothing was changed: ${error.message}`,
           code: error.code,
           startedAt,
         });
@@ -468,12 +479,12 @@ export class Pipeline {
     // units are watched for a moment and compared against what was recorded.
     if (snapshot !== undefined) {
       try {
-        const units = await confirmUnits(snapshot, ctx);
-        ok &&= units.ok;
-        notes.push(units.detail);
+        const restored = await confirmRestored(snapshot, ctx);
+        ok &&= restored.ok;
+        notes.push(restored.detail);
       } catch (err) {
         ok = false;
-        notes.push(`could not confirm the units: ${DwaraError.from(err).message}`);
+        notes.push(`could not confirm the restore: ${DwaraError.from(err).message}`);
       }
     }
 

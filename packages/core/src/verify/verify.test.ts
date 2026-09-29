@@ -122,7 +122,7 @@ describe('serviceActiveAndStable', () => {
 describe('containerRunningAndHealthy', () => {
   it('passes for a running container with a passing health check', async () => {
     const ctx = ctxWith(() => ({
-      stdout: JSON.stringify({ Running: true, Status: 'running', Health: { Status: 'healthy' } }),
+      stdout: `0|${JSON.stringify({ Running: true, Status: 'running', Health: { Status: 'healthy' } })}`,
     }));
 
     expect(await containerRunningAndHealthy('lab-app').run(ctx)).toEqual({
@@ -133,7 +133,9 @@ describe('containerRunningAndHealthy', () => {
 
   it('treats a container with no HEALTHCHECK as fine when it is running', async () => {
     // Absence of a signal is not a failing signal.
-    const ctx = ctxWith(() => ({ stdout: JSON.stringify({ Running: true, Status: 'running' }) }));
+    const ctx = ctxWith(() => ({
+      stdout: `0|${JSON.stringify({ Running: true, Status: 'running' })}`,
+    }));
 
     expect(await containerRunningAndHealthy('lab-app').run(ctx)).toEqual({
       ok: true,
@@ -143,7 +145,7 @@ describe('containerRunningAndHealthy', () => {
 
   it('fails a running but unhealthy container', async () => {
     const ctx = ctxWith(() => ({
-      stdout: JSON.stringify({ Running: true, Health: { Status: 'unhealthy' } }),
+      stdout: `0|${JSON.stringify({ Running: true, Health: { Status: 'unhealthy' } })}`,
     }));
     const outcome = await containerRunningAndHealthy('lab-app').run(ctx);
 
@@ -153,7 +155,7 @@ describe('containerRunningAndHealthy', () => {
 
   it('reports the exit code of a container that stopped', async () => {
     const ctx = ctxWith(() => ({
-      stdout: JSON.stringify({ Running: false, Status: 'exited', ExitCode: 137 }),
+      stdout: `0|${JSON.stringify({ Running: false, Status: 'exited', ExitCode: 137 })}`,
     }));
     const outcome = await containerRunningAndHealthy('lab-app').run(ctx);
 
@@ -166,6 +168,24 @@ describe('containerRunningAndHealthy', () => {
     await containerRunningAndHealthy('lab-app').run(ctx);
 
     expect(ctx.calls[0]?.sudo).toBeUndefined();
+  });
+
+  it('catches a container restart loop, which reads as running at every poll', async () => {
+    // Docker restarts a container that dies on boot within milliseconds, so it
+    // is "running" almost whenever you look. Only the count gives it away --
+    // the same gap serviceActiveAndStable closes with NRestarts, and it was
+    // missing here until an integration test restarted a doomed container and
+    // the pipeline called it a success.
+    const ctx = ctxWith((_command, nth) => ({
+      stdout: `${nth}|${JSON.stringify({ Running: true, Status: 'running' })}`,
+    }));
+    const check = containerRunningAndHealthy('lab-app');
+
+    expect((await check.run(ctx)).ok).toBe(true);
+    const second = await check.run(ctx);
+
+    expect(second.ok).toBe(false);
+    expect(second.detail).toMatch(/restarted 1 time\(s\) while being watched/);
   });
 
   it('fails cleanly on unparseable output rather than throwing', async () => {

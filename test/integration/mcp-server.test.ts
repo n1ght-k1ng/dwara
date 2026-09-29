@@ -84,6 +84,7 @@ describeTestbed('dwara MCP server', () => {
     expect(tools.filter((tool) => tool.name.startsWith('read_'))).toHaveLength(11);
     expect(tools.filter((tool) => tool.name.startsWith('reversible_')).map((t) => t.name)).toEqual([
       'reversible_restart_service',
+      'reversible_restart_container',
     ]);
     expect(tools.map((t) => t.name).sort()).toEqual([...toolNames].sort());
   });

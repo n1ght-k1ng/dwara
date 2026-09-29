@@ -172,6 +172,32 @@ uniquely bad from an agent, whose one unrecoverable failure is losing the connec
 
 437 unit tests, 73 integration.
 
+**Task 7 — `restart_container` (2026-09-29).** `feat(tools)`.
+
+Same five-case matrix, same shape as Task 6, through the whole pipeline. `SnapshotSpec` gained
+`containers`, `SnapshotRef` gained the recorded container states, and `confirmRestored` now checks units
+and containers together after an undo.
+
+**Two more bugs the matrix found, both in code written earlier this phase.**
+
+- **`tool.snapshot()` was called outside the pipeline's try block.** `restart_container` guards its name
+  there — the right place, since it refuses before anything reaches the host — but the throw escaped
+  `execute()` as a raw exception instead of a typed result, which `CLAUDE.md` forbids. `restart_service`
+  was unaffected only by luck: its guard lives in `apply`. The tool's own code and wording now survive
+  the catch, so a protected-container refusal does not come back as "could not take a snapshot".
+- **`containerRunningAndHealthy` never looked at `RestartCount`.** A container under `--restart=always`
+  that dies on boot therefore passed verification, because Docker restarts it within milliseconds and it
+  reads as running at nearly every poll. The service check closed this exact gap with `NRestarts`; the
+  container check had not. The asymmetry survived unit tests and died on the first real doomed container.
+
+Two fixture lessons worth keeping for the remaining tools: a command running as **PID 1 gets no default
+signal handlers**, so `sleep infinity` ignores SIGTERM and `docker restart` waits out the full stop
+timeout — every restart in the suite read as a timeout until the test containers got `--stop-timeout 1`.
+And a crash-looping container is **still cycling when `docker run -d` returns**, so stopping it
+immediately records a snapshot of a moment that never settled.
+
+454 unit tests, 82 integration.
+
 ## Done
 
 **Repo setup**

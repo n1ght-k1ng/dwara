@@ -18,6 +18,16 @@ export {
   restartService,
 } from './restart-service.js';
 export type { RestartResult, RestartServiceOptions, UnitReading } from './restart-service.js';
+export {
+  PROTECTED_CONTAINERS,
+  createRestartContainer,
+  restartContainer,
+} from './restart-container.js';
+export type {
+  ContainerReading,
+  RestartContainerOptions,
+  RestartContainerResult,
+} from './restart-container.js';
 
 export { DENIED_PATHS, DEFAULT_CONFIG_PATHS, DEFAULT_LOG_PATHS, guardPath } from './paths.js';
 
@@ -33,6 +43,7 @@ import { certExpiry } from './cert-expiry.js';
 import { readConfig } from './read-config.js';
 import { securityAudit } from './security-audit.js';
 import { restartService } from './restart-service.js';
+import { restartContainer } from './restart-container.js';
 
 /**
  * A registry holding every tool in this release.
@@ -56,6 +67,7 @@ export function createRegistry(): ToolRegistry {
   registry.register(securityAudit);
 
   registry.register(restartService);
+  registry.register(restartContainer);
 
   return registry;
 }

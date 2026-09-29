@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { AuditLog } from './audit/log.js';
 import { verifyChain } from './audit/verify.js';
+import { DwaraError } from './errors.js';
 import { Pipeline, type CommandRunner } from './pipeline.js';
 import { parsePolicy } from './policy/load.js';
 import { ToolRegistry } from './registry.js';
@@ -592,6 +593,33 @@ describe('Pipeline transactional execution', () => {
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe('SNAPSHOT_FAILED');
     expect(runner.calls.some((call) => call.argv[0] === 'systemctl')).toBe(false);
+  });
+
+  it('reports a tool that refuses its own arguments, rather than crashing', async () => {
+    // A tool may guard in snapshot(), which runs before anything reaches the
+    // host. CLAUDE.md is explicit that tools never throw raw errors at the MCP
+    // layer, so the refusal has to come back as a typed result.
+    const guarded: EchoTool = {
+      ...mutatingTool({ verifyOk: true }),
+      snapshot: () => {
+        throw new DwaraError('UNSAFE_ARGUMENT', 'Dwara will not touch that');
+      },
+    };
+    const runner = snapshotRunner();
+    const result = await build(runner, { tools: [guarded], policy: STAGING_POLICY }).execute(
+      'restart_thing',
+      { host: 'lab-api', unit: 'thing' },
+      new Session(),
+    );
+
+    expect(result.ok).toBe(false);
+    // Its own code and its own words, not "could not take a snapshot".
+    expect(result.error?.code).toBe('UNSAFE_ARGUMENT');
+    expect(result.error?.message).toBe('Dwara will not touch that');
+    expect(runner.calls).toHaveLength(0);
+
+    const entries = await audit.read();
+    expect(entries[entries.length - 1]?.result).toBe('refused');
   });
 
   it('rolls back automatically when verification fails', async () => {

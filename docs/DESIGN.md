@@ -357,3 +357,17 @@ recovers.** Reason: a restart is reversible in the sense that Dwara can put back
 to do. Whether it comes back healthy depends on why it was healthy before — if the fault is in what the
 unit runs, `systemctl start` cannot fix it, and Dwara reports `ROLLBACK_FAILED` and says a human is
 needed. That is the honest answer, and it is why the two error codes are distinct.
+
+2026-09-29 — **A tool may guard its arguments in `snapshot()`, and the pipeline catches it there.**
+Reason: `snapshot()` is the first thing called for a mutating tool, so a refusal raised while describing
+what to back up happens before anything reaches the host — the right place for it. But it was being
+called outside the pipeline's try block, so `restart_container` refusing a malformed name threw straight
+out of `execute()` instead of returning a typed result, which `CLAUDE.md` forbids. A tool's own error
+code and wording survive: "cannot snapshot" is the wrong thing to tell someone who asked to restart a
+container Dwara will not touch.
+
+2026-09-29 — **A container's `RestartCount` is checked the same way a unit's `NRestarts` is.** Reason:
+`containerRunningAndHealthy` looked only at `Running` and the health status, so a container under
+`--restart=always` that dies on boot passed verification — Docker restarts it within milliseconds, so it
+reads as running at almost every poll. The service check had closed this exact gap and the container
+check had not. Found when the matrix restarted a doomed container and the pipeline called it a success.

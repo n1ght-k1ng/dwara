@@ -4,6 +4,7 @@ export type { DwaraErrorCode, DwaraErrorDetails } from './errors.js';
 export { Risk, RISK_ORDER } from './types.js';
 export type {
   BuiltToolDef,
+  ContainerSnapshot,
   Ctx,
   Decision,
   HttpCheck,
@@ -56,6 +57,8 @@ export {
 
 export {
   SNAPSHOT_ROOT,
+  confirmContainers,
+  confirmRestored,
   confirmUnits,
   copyOf,
   createSnapshot,

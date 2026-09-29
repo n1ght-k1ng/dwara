@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { DwaraError } from '../errors.js';
 import { lexicalPathProblem, normalisePath, pathIsDenied } from '../paths.js';
 import type {
+  ContainerSnapshot,
   Ctx,
   RawResult,
   RemoteCommand,
@@ -45,6 +46,10 @@ const STAT_FORMAT = '%n|%a|%U|%G';
 
 /** Unit properties captured before a change. `Id` is what correlates the blocks. */
 const UNIT_PROPERTIES = 'Id,ActiveState,UnitFileState,NRestarts';
+
+/** One line per container. `.Name` arrives with a leading slash; it is trimmed. */
+const CONTAINER_FORMAT =
+  '{{.Name}}|{{.State.Running}}|{{.State.Status}}|{{.RestartCount}}|{{.Config.Image}}';
 
 /** A fresh, well-formed snapshot ID. */
 export function newSnapshotId(): string {
@@ -128,6 +133,7 @@ export interface RestoreResult {
 export async function createSnapshot(spec: SnapshotSpec, ctx: Ctx): Promise<SnapshotRef> {
   const paths = spec.paths.map(guardSnapshotPath);
   const units = spec.units ?? [];
+  const containers = spec.containers ?? [];
   const id = newSnapshotId();
   const dir = snapshotDir(id);
   const createdAt = new Date().toISOString();
@@ -182,6 +188,18 @@ export async function createSnapshot(spec: SnapshotSpec, ctx: Ctx): Promise<Snap
     }
   }
 
+  const containerStates =
+    containers.length === 0
+      ? undefined
+      : parseContainers(
+          // No sudo: docker group membership already carries the daemon's
+          // authority, and none of the docker read tools use it either.
+          await ctx.run({
+            argv: ['docker', 'inspect', '--format', CONTAINER_FORMAT, '--', ...containers],
+            timeoutMs: SNAPSHOT_TIMEOUT_MS,
+          }),
+        );
+
   const unitStates =
     units.length === 0
       ? undefined
@@ -198,6 +216,7 @@ export async function createSnapshot(spec: SnapshotSpec, ctx: Ctx): Promise<Snap
     paths: present,
     hashes,
     ...(unitStates === undefined ? {} : { units: unitStates }),
+    ...(containerStates === undefined ? {} : { containers: containerStates }),
   };
 
   // Written last, so a directory with a meta.json is a snapshot that completed.
@@ -349,6 +368,141 @@ export async function confirmUnits(
       mismatched.length === 0
         ? `${recorded.length} unit(s) are as the snapshot recorded them`
         : [...problems.values()].join('; '),
+  };
+}
+
+/**
+ * `<name>|<running>|<status>|<restarts>|<image>` per line.
+ *
+ * Like `stat`, `docker inspect` exits non-zero when any name is unknown but
+ * still prints the ones it found, so presence comes from stdout.
+ */
+function parseContainers(result: RawResult): Record<string, ContainerSnapshot> {
+  const out: Record<string, ContainerSnapshot> = {};
+
+  for (const line of result.stdout.split('\n')) {
+    const parts = line.split('|');
+    if (parts.length < 5) continue;
+
+    const name = (parts[0] ?? '').replace(/^\//, '');
+    if (name === '') continue;
+
+    const restarts = Number(parts[3]);
+    out[name] = {
+      running: parts[1] === 'true',
+      status: parts[2] ?? 'unknown',
+      restartCount: Number.isFinite(restarts) ? restarts : undefined,
+      image: parts[4] ?? '',
+    };
+  }
+
+  return out;
+}
+
+/**
+ * Confirms the recorded containers are back as the snapshot captured them.
+ *
+ * The container half of `confirmUnits`, and for the same reason: `docker start`
+ * returns as soon as the daemon accepts the request, so a container that dies
+ * on boot rolls back "successfully". `RestartCount` is the loop signal here,
+ * exactly as `NRestarts` is for a unit.
+ */
+export async function confirmContainers(
+  snapshot: SnapshotRef,
+  ctx: Ctx,
+  options: ConfirmUnitsOptions = {},
+): Promise<UnitConfirmation> {
+  const recorded = Object.entries(snapshot.containers ?? {});
+  if (recorded.length === 0) {
+    return { ok: true, mismatched: [], detail: 'snapshot recorded no containers' };
+  }
+
+  const now = options.now ?? (() => Date.now());
+  const sleep = options.sleep ?? ((ms: number) => new Promise((done) => setTimeout(done, ms)));
+  const deadline = now() + (options.settleMs ?? 3_000);
+  const problems = new Map<string, string>();
+
+  for (;;) {
+    const observed = parseContainers(
+      await ctx.run({
+        argv: [
+          'docker',
+          'inspect',
+          '--format',
+          CONTAINER_FORMAT,
+          '--',
+          ...recorded.map(([name]) => name),
+        ],
+        timeoutMs: SNAPSHOT_TIMEOUT_MS,
+      }),
+    );
+
+    for (const [name, before] of recorded) {
+      const after = observed[name];
+      if (after === undefined) {
+        problems.set(name, `${name} could not be read back`);
+        continue;
+      }
+
+      if (before.running !== after.running) {
+        problems.set(name, `${name} was ${before.status} and is ${after.status}`);
+        continue;
+      }
+
+      if (
+        after.restartCount !== undefined &&
+        before.restartCount !== undefined &&
+        after.restartCount > before.restartCount
+      ) {
+        problems.set(
+          name,
+          `${name} has restarted ${after.restartCount - before.restartCount} time(s) since`,
+        );
+      }
+    }
+
+    if (now() >= deadline) break;
+    await sleep(Math.min(500, Math.max(0, deadline - now())));
+  }
+
+  const mismatched = [...problems.keys()];
+  return {
+    ok: mismatched.length === 0,
+    mismatched,
+    detail:
+      mismatched.length === 0
+        ? `${recorded.length} container(s) are as the snapshot recorded them`
+        : [...problems.values()].join('; '),
+  };
+}
+
+/**
+ * Confirms everything a snapshot recorded is back, units and containers alike.
+ *
+ * What the pipeline calls after an undo, so "the host is back as it was" is an
+ * observation rather than a summary of exit codes.
+ */
+export async function confirmRestored(
+  snapshot: SnapshotRef,
+  ctx: Ctx,
+  options: ConfirmUnitsOptions = {},
+): Promise<UnitConfirmation> {
+  const units = await confirmUnits(snapshot, ctx, options);
+  const containers = await confirmContainers(snapshot, ctx, options);
+
+  const spoke = [
+    Object.keys(snapshot.units ?? {}).length > 0 ? units : undefined,
+    Object.keys(snapshot.containers ?? {}).length > 0 ? containers : undefined,
+  ].filter((part): part is UnitConfirmation => part !== undefined);
+
+  if (spoke.length === 0) {
+    return { ok: true, mismatched: [], detail: 'snapshot recorded no units or containers' };
+  }
+
+  return {
+    ok: spoke.every((part) => part.ok),
+    mismatched: spoke.flatMap((part) => part.mismatched),
+    detail: spoke.map((part) => part.detail).join('; '),
   };
 }
 

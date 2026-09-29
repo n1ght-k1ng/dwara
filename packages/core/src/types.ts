@@ -77,6 +77,17 @@ export interface SnapshotSpec {
   readonly paths: readonly string[];
   /** Units whose state is recorded so it can be put back. */
   readonly units?: readonly string[];
+  /** Containers whose state is recorded so it can be put back. */
+  readonly containers?: readonly string[];
+}
+
+/** What a container looked like before a change. */
+export interface ContainerSnapshot {
+  readonly running: boolean;
+  readonly status: string;
+  /** Docker's own `RestartCount`; a climb means it is looping. */
+  readonly restartCount: number | undefined;
+  readonly image: string;
 }
 
 /** What a systemd unit looked like before a change, so it can be put back. */
@@ -104,6 +115,8 @@ export interface SnapshotRef {
   readonly hashes: Readonly<Record<string, string>>;
   /** Unit states captured alongside the files, keyed by unit name. */
   readonly units?: Readonly<Record<string, UnitState>>;
+  /** Container states captured alongside the files, keyed by container name. */
+  readonly containers?: Readonly<Record<string, ContainerSnapshot>>;
 }
 
 /** What happened when a failed change was undone. */

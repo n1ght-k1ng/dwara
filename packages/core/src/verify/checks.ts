@@ -87,11 +87,22 @@ export function serviceActiveAndStable(unit: string, stableForMs = DEFAULT_STABL
   };
 }
 
-/** A container that is running, and passing its own health check if it has one. */
+/**
+ * A container that is running, passing its own health check if it has one, and
+ * not being resurrected behind your back.
+ *
+ * The restart-count half matters as much here as `NRestarts` does for a unit,
+ * and is easy to leave out because Docker keeps saying "running": a container
+ * under `--restart=always` that dies on boot is started again within
+ * milliseconds, so almost every instant you look at it, it is up. `RestartCount`
+ * is the only thing that distinguishes that from a healthy container.
+ */
 export function containerRunningAndHealthy(
   container: string,
   stableForMs = DEFAULT_STABLE_MS,
 ): Check {
+  let baselineRestarts: number | undefined;
+
   return {
     name: `container ${container} running and healthy`,
     stableForMs,
@@ -99,7 +110,14 @@ export function containerRunningAndHealthy(
       // No sudo: the lab's dwara user is in the docker group, and none of the
       // read tools use sudo for docker either.
       const result = await ctx.run({
-        argv: ['docker', 'inspect', '--format', '{{json .State}}', '--', container],
+        argv: [
+          'docker',
+          'inspect',
+          '--format',
+          '{{.RestartCount}}|{{json .State}}',
+          '--',
+          container,
+        ],
         timeoutMs: CHECK_TIMEOUT_MS,
       });
 
@@ -107,8 +125,12 @@ export function containerRunningAndHealthy(
         return { ok: false, detail: `cannot inspect ${container}: ${firstLine(result.stderr)}` };
       }
 
-      const state = parseState(result.stdout);
-      if (state === undefined) {
+      // RestartCount is top-level, not part of .State, so it is prefixed rather
+      // than read out of the state object.
+      const separator = result.stdout.indexOf('|');
+      const restarts = Number(result.stdout.slice(0, separator));
+      const state = parseState(result.stdout.slice(separator + 1));
+      if (separator < 0 || state === undefined) {
         return { ok: false, detail: `could not read the state of ${container}` };
       }
 
@@ -118,6 +140,16 @@ export function containerRunningAndHealthy(
           ok: false,
           detail: `${container} is ${String(state.Status ?? 'not running')}${code}`,
         };
+      }
+
+      if (Number.isFinite(restarts)) {
+        baselineRestarts ??= restarts;
+        if (restarts > baselineRestarts) {
+          return {
+            ok: false,
+            detail: `${container} has restarted ${restarts - baselineRestarts} time(s) while being watched; it is in a restart loop, not running`,
+          };
+        }
       }
 
       // A container with no HEALTHCHECK reports no Health block at all. That is
