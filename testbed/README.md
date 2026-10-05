@@ -47,7 +47,7 @@ curl -k https://127.0.0.1:8443/health
 
 ## Failure scenarios
 
-`pnpm testbed:break <name>` applies one; `testbed/breaks/<name>.sh --check` asserts
+`pnpm testbed:break <name>` applies one; `pnpm testbed:break <name> --check` asserts
 the failure is actually live, which is what makes them usable as benchmark
 fixtures. Recovery is always `pnpm testbed:reset`.
 

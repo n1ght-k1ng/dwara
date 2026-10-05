@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# lab-db: connection slots are exhausted and the app can no longer reach the database.
+# lab-db: connection slots are exhausted and the app cannot reach the database.
 #
 # The symptom shows up on lab-api as a 502, but nothing is wrong there: the app
 # cannot get a connection at boot, so it exits and restarts. Postgres itself is
-# active and its port is open, which is the confusing part. The evidence that
-# separates this from api-crash-loop is in the app's journal -- "remaining
-# connection slots are reserved" rather than an authentication failure.
+# active and its port is open, which is the confusing part. What separates this
+# from api-crash-loop is in the app's journal -- "remaining connection slots are
+# reserved" rather than an authentication failure.
+#
+# Fixable: the limit lives in /etc/postgresql/16/main/conf.d, which is on
+# edit_config's allow-list, and the change takes effect on a restart.
 #
 # The superuser reserve is left intact, so an operator can still connect to
 # lab-db to diagnose it.
-
-source "$(dirname "${BASH_SOURCE[0]}")/../scripts/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
 
 HOST=lab-db
 # max_connections minus superuser_reserved_connections: the slots an ordinary
@@ -18,10 +20,14 @@ HOST=lab-db
 APP_SLOTS=2
 
 psql_admin() {
-  lab_root "$HOST" su - postgres -c "psql -tAc \"$1\""
+  local out
+  out="$(lab_root "$HOST" su - postgres -c "psql -tAc \"$1\"" 2>/dev/null)" || true
+  printf '%s' "$out"
 }
 
 apply() {
+  local held deadline
+
   log "breaking $HOST: max_connections=5 with every application slot held open"
   lab_root "$HOST" bash -c "printf 'max_connections = 5\nsuperuser_reserved_connections = 3\n' \
     > /etc/postgresql/16/main/conf.d/90-dwara-break.conf"
@@ -35,7 +41,7 @@ apply() {
       'setsid nohup bash -c "while true; do PGPASSWORD=labpass psql -h 127.0.0.1 -U labapp -d labdb -c \"SELECT pg_sleep(3600)\" >/dev/null 2>&1; sleep 1; done" >/dev/null 2>&1 &'
   done
 
-  local held deadline=$(( SECONDS + 60 ))
+  deadline=$(( SECONDS + 60 ))
   while :; do
     held="$(psql_admin "SELECT count(*) FROM pg_stat_activity WHERE usename = 'labapp'" | tr -dc '0-9')"
     [ "${held:-0}" -lt "$APP_SLOTS" ] || break
@@ -46,31 +52,4 @@ apply() {
   ok "$HOST: $held/$APP_SLOTS application connection slots held"
 }
 
-check() {
-  local limit
-  limit="$(psql_admin 'SHOW max_connections' | tr -dc '0-9')"
-  [ "$limit" -le 5 ] || die "max_connections is $limit, expected 5"
-
-  local state
-  state="$(lab_ssh "$HOST" 'systemctl is-active postgresql@16-main.service' || true)"
-  [ "$state" = "active" ] || warn "postgres is $state; the scenario expects it to stay active"
-
-  local code
-  code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 https://127.0.0.1:8443/health || echo 000)"
-  [ "$code" != "200" ] || die "lab-api /health still returns 200"
-
-  local deadline=$(( SECONDS + 60 ))
-  until lab_ssh lab-api 'sudo -n journalctl -u dwara-app -n 50 --no-pager' 2>/dev/null \
-        | grep -q 'remaining connection slots are reserved'; do
-    [ "$SECONDS" -lt "$deadline" ] || die "lab-api's journal never showed a connection-slot failure"
-    sleep 3
-  done
-
-  ok "failure is live: max_connections=$limit, postgres $state, lab-api -> $code on exhausted slots"
-}
-
-case "${1:-apply}" in
-  --check) check ;;
-  apply|'') apply ;;
-  *) die "usage: $(basename "$0") [--check]" ;;
-esac
+apply

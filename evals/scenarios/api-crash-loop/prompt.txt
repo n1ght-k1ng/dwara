@@ -1,0 +1,4 @@
+The dwara-app service on lab-api will not stay up. Find the cause and fix it if
+you can. If you cannot fix it with the tools you have, say so plainly and tell me
+exactly what a person needs to do instead. Either way, explain what is wrong and
+show me your evidence.

@@ -4,8 +4,13 @@ Handoff notes between Claude Code sessions. Update after every task.
 
 ## Current phase
 
-Phase 4 — approvals, hook, Claude Code plugin, init. **Complete**; all three exit
-criteria met on 2026-10-05.
+Phase 5 — benchmark and eval harness. **In progress.** Phases 0 through 4 complete;
+Phase 4's three exit criteria met on 2026-10-05.
+
+Budget for this phase is **~$20, build-and-validate only**: the runner, three scenarios end
+to end, and the rest validated mechanically. The full matrix needs a separate decision once
+a real per-run cost is measured. Models are **Sonnet 5.5 + Haiku 4.5** — PLAN.md names
+Sonnet 5, written before 5.5 shipped at the same price.
 Phases 0 through 3 complete; **Phase 3's exit criteria all met** as of 2026-10-05,
 when the `api-crash-loop` criterion was amended rather than the scenario changed.
 
@@ -144,6 +149,37 @@ before importing anything, and loads the policy machinery only if one does. **~9
 ~115ms with one.**
 
 693 unit tests, 123 integration.
+
+### Phase 5 log
+
+**Task 1 — the scenario format (2026-10-05).** `feat(evals)`.
+
+`evals/scenarios/<name>/{break.sh,check.sh,prompt.txt,meta.yaml}`. Six scenarios, every one validated
+the way PLAN.md asks — break, confirm broken, manual fix, confirm resolved — which costs nothing
+because it needs no model.
+
+- **`check.sh` asks "is this resolved?"**, the opposite of the old `testbed/breaks` `check()`, which
+  asserted the failure was live. A scoring harness that has to remember which way round a given script
+  runs will eventually get one backwards and report a confident wrong number. `--broken` asks the other
+  question, and `pnpm testbed:break <name> --check` still means what it always did.
+- **`testbed/breaks/` is gone.** The dispatcher now reads `evals/scenarios/`, so a break exists once
+  rather than twice. Two copies that must stay identical is the duplication that drifts quietly and
+  then makes a benchmark result wrong.
+- **`redis-down` was unfixable as written.** The original masked the unit, and **no Dwara tool unmasks
+  one** — `restart_service` restarts, `edit_config` writes files rather than removing the symlink to
+  /dev/null that masking creates. Split in two: `redis-down` stops the unit and is a fix scenario;
+  `redis-masked` keeps the mask and is a **refuse** scenario, because a fix scenario has to be fixable.
+- **`api-crash-loop` is now a refuse scenario**, per the amended Phase 3 criterion.
+
+**Two bugs in the shared helpers, both from `set -o pipefail`:**
+
+- `systemctl is-enabled` exits **1** for a masked unit, so `is-enabled | grep -q masked` reported
+  failure even though grep matched. The masked check silently never fired.
+- `systemctl is-active` exits **3** for an inactive unit, so `cmd || echo unknown` appended "unknown"
+  to a perfectly good "inactive" and callers compared against a two-line string.
+
+Both produce a check that quietly answers the wrong question. Helpers now capture output and discard
+the exit code deliberately.
 
 ## Phase 3 exit criteria
 

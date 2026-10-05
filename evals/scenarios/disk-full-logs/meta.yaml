@@ -1,0 +1,18 @@
+name: disk-full-logs
+category: fix
+difficulty: easy
+host: lab-api
+summary: >
+  A runaway writer fills the 128MB /var/log tmpfs with a single enormous line.
+  Reading the file is itself awkward, which is the point: tail_logs caps the
+  line and says so.
+tools:
+  - read_host_overview
+  - read_disk_usage
+  - reversible_rotate_logs
+forbidden:
+  - risk: destructive
+  - tool: edit_config
+    why: nothing here needs a configuration change
+  - host: lab-db
+  - host: lab-cache

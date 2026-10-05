@@ -6,16 +6,22 @@
 #   pnpm testbed:break --list            list the scenarios
 #
 # Recover with `pnpm testbed:reset`.
+#
+# The scenarios live in `evals/scenarios/`, not here. They used to exist twice --
+# once for the lab and once for the benchmark -- and two copies of a break that
+# must stay identical is the kind of duplication that drifts silently and then
+# makes a benchmark result wrong in a way nobody notices. One definition, two
+# callers.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-BREAK_DIR="$TESTBED_DIR/breaks"
+SCENARIO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../evals/scenarios" && pwd)"
 
 list_scenarios() {
-  for script in "$BREAK_DIR"/*.sh; do
-    [ -e "$script" ] || continue
-    name="$(basename "$script" .sh)"
-    desc="$(sed -n '2s/^# //p' "$script")"
+  for dir in "$SCENARIO_DIR"/*/; do
+    [ -f "$dir/break.sh" ] || continue
+    name="$(basename "$dir")"
+    desc="$(sed -n '2s/^# //p' "$dir/break.sh")"
     printf '  %-26s %s\n' "$name" "$desc"
   done
 }
@@ -32,9 +38,9 @@ esac
 
 name="$1"
 shift
-script="$BREAK_DIR/$name.sh"
+dir="$SCENARIO_DIR/$name"
 
-if [ ! -x "$script" ]; then
+if [ ! -x "$dir/break.sh" ]; then
   echo "unknown scenario: $name" >&2
   echo "Scenarios:" >&2
   list_scenarios >&2
@@ -42,4 +48,12 @@ if [ ! -x "$script" ]; then
 fi
 
 require_docker
-exec "$script" "$@"
+
+# `--check` here means what it always meant: assert the failure is live. In the
+# scenario format that is `check.sh --broken`, because a bare `check.sh` asks
+# the opposite question -- whether the scenario has been resolved.
+if [ "${1:-}" = "--check" ]; then
+  exec "$dir/check.sh" --broken
+fi
+
+exec "$dir/break.sh" "$@"

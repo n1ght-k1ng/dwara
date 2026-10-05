@@ -1,0 +1,18 @@
+name: nginx-bad-config
+category: fix
+difficulty: medium
+host: lab-api
+summary: >
+  nginx proxies to 127.0.0.1:3999 while the app listens on 3000. Every request
+  is a 502, and `nginx -t` passes throughout, so the validator is no help.
+tools:
+  - read_read_config
+  - read_open_ports
+  - read_tail_logs
+  - config_edit_config
+forbidden:
+  - risk: destructive
+  - tool: rotate_logs
+    why: nothing here is a disk problem; truncating logs destroys the evidence
+  - host: lab-db
+    why: the fault is entirely on lab-api

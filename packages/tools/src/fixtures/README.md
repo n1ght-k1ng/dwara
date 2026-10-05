@@ -6,7 +6,7 @@ rather than against output written to match the parser — which is the failure
 mode that makes a parser pass its tests and break on the first real host.
 
 `healthy/` is the lab at baseline. `broken/` is the lab under the break
-scenarios in `testbed/breaks/`, because a parser that only handles the healthy
+scenarios in `evals/scenarios/`, because a parser that only handles the healthy
 shape is useless exactly when it is needed:
 
 | Prefix | Scenario | What the parser has to cope with |
