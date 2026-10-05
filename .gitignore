@@ -24,3 +24,6 @@ dwara-plan.zip
 .env
 .env.*
 !.env.example
+
+# The plugin bundles a copy of the hook at build time; the source is in packages/hook.
+packages/plugin-claude-code/hook/

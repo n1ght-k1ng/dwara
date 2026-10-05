@@ -7,7 +7,12 @@
   "files": [
     "commands",
     "skills",
-    "hooks.json",
+    "hooks",
+    "hook",
     ".claude-plugin"
-  ]
+  ],
+  "scripts": {
+    "build": "mkdir -p hook && cp ../hook/dist/index.js hook/index.js",
+    "clean": "rm -rf hook"
+  }
 }

@@ -67,6 +67,27 @@ wrong thing easy and the right thing require care.
 
 675 unit tests, 123 integration.
 
+**Task 5 — the Claude Code plugin (2026-10-05).** `feat(plugin)`.
+
+Five commands, an investigation skill, and `hooks.json`. All validated with
+`claude plugin validate` rather than assumed correct, which caught two things:
+
+- **An unquoted `${CLAUDE_PLUGIN_ROOT}` splits on a space in the install path.** The validator flagged
+  it and suggested exec form, which is what is used: `"command": "node", "args": [...]`.
+- **A sibling path to `../hook/dist` could never have worked.** An installed plugin has no workspace
+  beside it. The plugin now bundles the built hook at build time; `hook/` is gitignored.
+
+Also worth recording: validating the plugin root checks the manifest and the hooks but reports
+`contents: []` — it does **not** walk into `commands/` and `skills/`. Those need validating separately,
+and the README says so.
+
+The skill carries the Phase 3 gate's lesson explicitly: a config change takes **two** approvals, preview
+then write, and an agent that does not know that stops halfway and reports failure. It also says which
+of the three outcomes — verified, rolled back, could not be undone — must never be softened.
+
+Permission settings are **not** in the plugin. Allowing `read_*` and prompting for the rest is a
+property of a project, so `dwara init` writes it into `.claude/settings.json`.
+
 ## Phase 3 exit criteria
 
 - [x] Every mutating tool has the full test matrix passing on the testbed — six tools,

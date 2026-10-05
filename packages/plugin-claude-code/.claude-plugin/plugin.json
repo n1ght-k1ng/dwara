@@ -1,0 +1,8 @@
+{
+  "name": "dwara",
+  "description": "Policy-controlled SSH access for AI coding agents: typed tools, approvals, snapshots and rollback instead of a raw shell.",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "author": { "name": "Dwara contributors" },
+  "keywords": ["ssh", "infrastructure", "operations", "safety", "mcp"]
+}
