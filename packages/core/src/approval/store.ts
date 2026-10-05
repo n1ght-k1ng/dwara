@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { canonicalise } from '../audit/entry.js';
@@ -97,10 +97,17 @@ export function planHash(plan: {
 
 /** What the pipeline needs of an approval store. */
 export interface ApprovalStore {
-  /** An unused, unexpired approval bound to this plan, if one exists. */
-  find(planHash: string): Promise<Approval | undefined>;
-  /** Marks an approval spent. An approval is good for exactly one action. */
-  consume(id: string): Promise<void>;
+  /**
+   * Spends an approval bound to this plan, atomically, and returns it.
+   *
+   * One method rather than a `find` followed by a `consume`, because those two
+   * had a window between them: an adversarial review during Phase 4 confirmed
+   * that two concurrent calls both found the same unused approval and both
+   * went on to spend it. Claude Code issues tool calls in parallel, so an
+   * agent could ask for one approval and make the change twice. Claiming is
+   * now a single indivisible step and cannot be used the unsafe way.
+   */
+  claim(planHash: string): Promise<Approval | undefined>;
   /** Records what was asked for, so a human can read it before deciding. */
   record(request: ApprovalRequest): Promise<void>;
 }
@@ -145,13 +152,59 @@ export class FileApprovalStore implements ApprovalStore {
     return undefined;
   }
 
+  /**
+   * Takes an approval for this plan, or returns undefined if there is none to
+   * take.
+   *
+   * The claim is an **exclusive file create**, which the filesystem makes
+   * indivisible: two callers racing for the same approval cannot both succeed,
+   * because the second gets `EEXIST`. The marker is what decides; `used_at` is
+   * written afterwards so that `dwara approve --list` reads naturally, and is
+   * a record rather than the lock.
+   */
+  async claim(hash: string): Promise<Approval | undefined> {
+    const now = this.now();
+
+    for (const approval of await this.all()) {
+      if (approval.plan_hash !== hash) continue;
+      if (approval.used_at !== undefined) continue;
+      if (Date.parse(approval.expires_at) <= now.getTime()) continue;
+
+      try {
+        await writeFile(this.claimPath(approval.id), now.toISOString(), {
+          encoding: 'utf8',
+          flag: 'wx',
+        });
+      } catch {
+        // Someone else got there first. Keep looking: another approval may
+        // cover the same plan.
+        continue;
+      }
+
+      const spent: Approval = { ...approval, used_at: now.toISOString() };
+      await this.write(spent);
+      return spent;
+    }
+
+    return undefined;
+  }
+
+  /** Marks an approval spent. Kept for the CLI and for tests. */
   async consume(id: string): Promise<void> {
     const approval = await this.read(id);
     if (approval === undefined) {
       throw new DwaraError('INTERNAL', `no approval "${id}" to spend`);
     }
 
+    await writeFile(this.claimPath(id), this.now().toISOString(), {
+      encoding: 'utf8',
+      flag: 'w',
+    });
     await this.write({ ...approval, used_at: this.now().toISOString() });
+  }
+
+  private claimPath(id: string): string {
+    return join(this.approvalsDir, `${id}.claim`);
   }
 
   async record(request: ApprovalRequest): Promise<void> {
@@ -203,7 +256,15 @@ export class FileApprovalStore implements ApprovalStore {
         await readFile(join(this.approvalsDir, `${id}.json`), 'utf8'),
       );
       const parsed = approvalSchema.safeParse(raw);
-      return parsed.success ? parsed.data : undefined;
+      if (!parsed.success) return undefined;
+
+      // The claim marker is the authority on whether it was spent. If the
+      // process died between claiming and rewriting the approval, the marker
+      // is still there and the approval is still gone.
+      if (parsed.data.used_at === undefined && (await exists(this.claimPath(id)))) {
+        return { ...parsed.data, used_at: 'unknown' };
+      }
+      return parsed.data;
     } catch {
       return undefined;
     }
@@ -220,6 +281,7 @@ export class FileApprovalStore implements ApprovalStore {
 
     const found: Approval[] = [];
     for (const name of names) {
+      if (!name.endsWith('.json')) continue;
       const approval = await this.read(name.replace(/\.json$/, ''));
       if (approval !== undefined) found.push(approval);
     }
@@ -242,5 +304,15 @@ export class FileApprovalStore implements ApprovalStore {
       `${JSON.stringify(approval, null, 2)}\n`,
       'utf8',
     );
+  }
+}
+
+/** True when a path exists. Used only to see whether a claim marker is there. */
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
 }

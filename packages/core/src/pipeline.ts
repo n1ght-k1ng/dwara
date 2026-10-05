@@ -153,7 +153,11 @@ export class Pipeline {
 
     if (decision.kind === 'approval') {
       const hash = planHash({ tool: tool.name, host, input });
-      approval = await this.options.approvals?.find(hash);
+      // Claimed in one indivisible step. A `find` followed by a `consume`
+      // left a window in which two parallel tool calls both saw the same
+      // unused approval and both spent it -- confirmed, not theorised, during
+      // the Phase 4 adversarial review.
+      approval = await this.options.approvals?.claim(hash);
 
       if (approval === undefined) {
         // Record what was asked for, so `dwara approve` can show a person the
@@ -184,11 +188,9 @@ export class Pipeline {
         });
       }
 
-      // Spent before the action runs, not after. If the process dies midway the
-      // approval is gone, which is the safe direction to fail: a human grants
-      // another. Spending it afterwards would leave a window in which the same
-      // approval could authorise a second action.
-      await this.options.approvals?.consume(approval.id);
+      // Already spent by `claim`, before the action runs. If the process dies
+      // midway the approval is gone, which is the safe direction to fail: a
+      // human grants another.
     }
 
     // 5 · Execute. From here the action has reached a host, so it counts

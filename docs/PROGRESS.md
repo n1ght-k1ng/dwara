@@ -46,6 +46,27 @@ installed globally must not break the projects that do not use Dwara.
 
 671 unit tests.
 
+**Task 4 — adversarial review of self-approval (2026-10-05).** `fix(core)`, `docs`.
+
+`docs/THREAT_MODEL.md` started: fourteen routes an agent could take to approve its own action, what
+stops each, and the test that pins it. A row without a test is a claim, not a control.
+
+**One of them worked.** The pipeline called `find(planHash)` then `consume(id)` as two steps, and
+between them was a window: two concurrent calls both found the same unused approval and both went on to
+spend it. Not theoretical — **Claude Code issues tool calls in parallel**, so an agent could ask for one
+approval and make the change twice. Reproduced before fixing.
+
+The damage was bounded, since both calls carry the same plan hash and so do the thing the human
+approved, twice. But "an approval is good for exactly one action" was a claim Dwara made and could not
+keep, and for `edit_config` that is two writes.
+
+Fixed by replacing both steps with a single `claim(planHash)` whose lock is an **exclusive file create**
+— the filesystem makes it indivisible, and the loser gets `EEXIST`. `ApprovalStore` no longer exposes a
+method that can be used the unsafe way, which matters more than the fix: the old interface made the
+wrong thing easy and the right thing require care.
+
+675 unit tests, 123 integration.
+
 ## Phase 3 exit criteria
 
 - [x] Every mutating tool has the full test matrix passing on the testbed — six tools,

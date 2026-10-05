@@ -111,6 +111,57 @@ describe('FileApprovalStore', () => {
     expect(await store.find(pending.plan_hash)).toBeUndefined();
   });
 
+  it('cannot be claimed twice, even by callers racing for it', async () => {
+    // The hole the Phase 4 adversarial review found. `find` followed by
+    // `consume` left a window: two concurrent calls both saw the same unused
+    // approval and both went on to spend it. Claude Code issues tool calls in
+    // parallel, so an agent could ask once and change twice.
+    const pending = request();
+    await grantApproval(store, pending);
+
+    const racers = await Promise.all([
+      store.claim(pending.plan_hash),
+      store.claim(pending.plan_hash),
+      store.claim(pending.plan_hash),
+      store.claim(pending.plan_hash),
+    ]);
+
+    expect(racers.filter((item) => item !== undefined)).toHaveLength(1);
+  });
+
+  it('stays spent once claimed', async () => {
+    const pending = request();
+    await grantApproval(store, pending);
+
+    expect(await store.claim(pending.plan_hash)).toBeDefined();
+    expect(await store.claim(pending.plan_hash)).toBeUndefined();
+    expect(await store.find(pending.plan_hash)).toBeUndefined();
+  });
+
+  it('treats a claim marker as spent even if the approval file still says otherwise', async () => {
+    // If the process died between claiming and rewriting the approval, the
+    // marker is still there and the approval must still be gone.
+    const pending = request();
+    const granted = await grantApproval(store, pending);
+    await writeFile(join(dir, 'approvals', `${pending.id}.claim`), 'now', 'utf8');
+    await store.write({ ...granted, used_at: undefined });
+
+    expect(await store.claim(pending.plan_hash)).toBeUndefined();
+  });
+
+  it('claims a second approval for the same plan rather than giving up', async () => {
+    // Two people approved the same thing. The first claim takes one; the
+    // second should take the other rather than report none available.
+    const first = request();
+    const second = request({ plan_hash: first.plan_hash });
+    await grantApproval(store, first);
+    await grantApproval(store, second);
+
+    expect(await store.claim(first.plan_hash)).toBeDefined();
+    expect(await store.claim(first.plan_hash)).toBeDefined();
+    expect(await store.claim(first.plan_hash)).toBeUndefined();
+  });
+
   it('will not find an expired approval', async () => {
     const pending = request();
     let clock = new Date('2026-09-29T10:00:00.000Z');
