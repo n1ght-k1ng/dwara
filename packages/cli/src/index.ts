@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import { DwaraError } from '@dwara/core';
 import { approve, listPending } from './approve.js';
 import { formatAudit, verifyAudit } from './audit.js';
+import { init } from './init.js';
 import { listHostSnapshots, rollback } from './rollback.js';
 import { formatReport, runDoctor } from './doctor.js';
 
@@ -19,6 +20,8 @@ export type { DoctorReport, DoctorOptions, HostReport, Check } from './doctor.js
 export { approve, formatRequest, listPending } from './approve.js';
 export { hostForSnapshot, listHostSnapshots, rollback } from './rollback.js';
 export { formatAudit, readAudit, verifyAudit } from './audit.js';
+export { init } from './init.js';
+export type { InitOptions, InitResult } from './init.js';
 export type { AuditOptions, VerifyReport } from './audit.js';
 export type { RollbackOptions, RollbackReport } from './rollback.js';
 export type { ApproveOptions, ApproveResult } from './approve.js';
@@ -121,6 +124,41 @@ export function buildProgram(): Command {
 
         console.log(report.text);
         process.exitCode = report.ok ? 0 : 1;
+      },
+    );
+
+  program
+    .command('init')
+    .description('set Dwara up in this project: pick hosts, write a policy, register the server')
+    .option('-F, --ssh-config <path>', 'SSH config to read hosts from', '~/.ssh/config')
+    .option('-d, --dir <path>', 'where to write .dwara and .claude', '.')
+    .option('--host <alias...>', 'hosts to manage; asked for interactively when omitted')
+    .option('--production <alias...>', 'of those, the ones to treat as production')
+    .option('--no-doctor', 'skip the connectivity check')
+    .option('--no-register', 'do not run `claude mcp add`')
+    .option('-y, --yes', 'take every default; needs --host')
+    .action(
+      async (options: {
+        sshConfig: string;
+        dir: string;
+        host?: string[];
+        production?: string[];
+        doctor: boolean;
+        register: boolean;
+        yes?: boolean;
+      }) => {
+        const result = await init({
+          sshConfigPath: options.sshConfig,
+          dir: options.dir,
+          ...(options.host === undefined ? {} : { hosts: options.host }),
+          ...(options.production === undefined ? {} : { production: options.production }),
+          skipDoctor: !options.doctor,
+          register: options.register,
+          ...(options.yes === true ? { yes: true } : {}),
+        });
+
+        console.log(result.text);
+        process.exitCode = result.ok ? 0 : 1;
       },
     );
 

@@ -88,6 +88,30 @@ of the three outcomes — verified, rolled back, could not be undone — must ne
 Permission settings are **not** in the plugin. Allowing `read_*` and prompting for the rest is a
 property of a project, so `dwara init` writes it into `.claude/settings.json`.
 
+**Task 6 — `dwara init` (2026-10-05).** `feat(cli)`.
+
+DESIGN §17 end to end, in **987ms** against the lab with doctor passing. 18 tests, all against
+`testbed/ssh_config` and a temp directory — never `~/.ssh/config`, because a setup command that read
+the developer's real hosts while being tested is exactly what `CLAUDE.md` forbids during phases 0–6.
+
+- **Restrictive by default.** Every selected host gets `require_approval` for `reversible` and
+  `config`; tagging a host production only ever adds restrictions. A looser policy has to be written on
+  purpose.
+- **The policy file is commented**, because a generated blob is something people skim once and a
+  commented one is something they edit. It is the control, so it is worth the characters.
+- **It will not overwrite permissions someone already set.** It prints what to add instead. Silently
+  discarding configuration to add a convenience is not a trade worth making.
+- **It writes the policy even when doctor fails**, so an unreachable host can be fixed without starting
+  over. Verified by running it from a directory where the testbed's relative key paths do not resolve.
+- Paths are resolved absolute: a relative policy path would end up in the MCP registration and be read
+  against whatever directory the server happened to start in.
+
+Permission rules are two lines — `mcp__dwara__read_*` allowed, `reversible_*` and `config_*` ask —
+which only works because every tool name carries its risk class as a prefix. The wildcard form was
+confirmed against the Claude Code binary rather than assumed.
+
+693 unit tests.
+
 ## Phase 3 exit criteria
 
 - [x] Every mutating tool has the full test matrix passing on the testbed — six tools,
