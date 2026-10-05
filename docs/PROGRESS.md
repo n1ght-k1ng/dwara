@@ -4,7 +4,8 @@ Handoff notes between Claude Code sessions. Update after every task.
 
 ## Current phase
 
-Phase 4 — approvals, hook, Claude Code plugin, init. **In progress.**
+Phase 4 — approvals, hook, Claude Code plugin, init. **Complete**; all three exit
+criteria met on 2026-10-05.
 Phases 0 through 3 complete; **Phase 3's exit criteria all met** as of 2026-10-05,
 when the `api-crash-loop` criterion was amended rather than the scenario changed.
 
@@ -111,6 +112,38 @@ which only works because every tool name carries its risk class as a prefix. The
 confirmed against the Claude Code binary rather than assumed.
 
 693 unit tests.
+
+**Task 7 — Phase 4 exit gate (2026-10-05).**
+
+| Criterion | Result |
+|---|---|
+| Hook blocks every evasion case | **met** — 67 cases, zero false negatives, asserted as one statement |
+| No path to apply a config change without human approval | **met** — 14 routes reviewed, 13 already closed, 1 found and fixed |
+| Fresh setup to first diagnosis under 2 minutes | **met** — 989ms from empty directory to a real tool call against the lab |
+
+Setup was measured end to end: `dwara init` (606ms) then an MCP `tools/call` of `read_host_overview`
+against `lab-api`, returning real load figures. The two-minute budget is for a human; the mechanical
+part is a second.
+
+**The gate found a bug that would have shipped.** Running the *plugin's bundled copy* of the hook —
+rather than the one in `packages/hook/dist` that every test uses — it died immediately:
+`Cannot find package 'shell-quote'`. An installed plugin is a directory of files with **no node_modules
+beside it**, so the ordinary build with external imports cannot run there. Three rounds to fix:
+
+1. A `standalone` build with `noExternal` to inline the dependencies — which then failed on
+   `Dynamic require of "process"`, because bundling CommonJS (`yaml`, via the policy loader) into ESM
+   leaves `require` calls an ES module does not have.
+2. Node builtins marked **external**, which is the correct config for a node target and the thing that
+   actually fixed it. A `createRequire` banner did not, because esbuild's own shim takes precedence.
+3. `"type": "module"` on the plugin package, without which Node reparses the bundle on every call.
+
+**And a latency problem worth fixing while there.** The hook runs before *every* Bash call, and the
+bundle is 1.08 MB. At 190ms a call — 163ms even in projects with no Dwara policy at all — that is a tax
+on everyone who installs the plugin globally. `managedHosts` now checks whether a policy file exists
+before importing anything, and loads the policy machinery only if one does. **~95ms with no policy,
+~115ms with one.**
+
+693 unit tests, 123 integration.
 
 ## Phase 3 exit criteria
 

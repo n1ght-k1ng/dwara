@@ -12,7 +12,8 @@
     ".claude-plugin"
   ],
   "scripts": {
-    "build": "mkdir -p hook && cp ../hook/dist/index.js hook/index.js",
+    "build": "mkdir -p hook && cp ../hook/dist/standalone.js hook/index.js",
     "clean": "rm -rf hook"
-  }
+  },
+  "type": "module"
 }

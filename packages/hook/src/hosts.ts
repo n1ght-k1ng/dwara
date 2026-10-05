@@ -1,5 +1,5 @@
+import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadPolicy, matchesHost, parseSshConfig } from '@dwara/core';
 
 /**
  * Working out which hosts Dwara is actually managing.
@@ -38,6 +38,21 @@ export async function managedHosts(options: {
   const cwd = options.cwd ?? process.cwd();
   const policyPath =
     options.policyPath ?? process.env['DWARA_POLICY'] ?? join(cwd, '.dwara', 'policy.yaml');
+
+  // Checked before anything heavy is loaded. This hook runs before **every**
+  // Bash call, and most projects do not use Dwara at all; making those
+  // sessions pay to parse a policy loader they will never call is the
+  // difference between a plugin people keep installed and one they do not.
+  try {
+    await access(policyPath);
+  } catch {
+    return NONE;
+  }
+
+  // Imported here rather than at the top so the check above can short-circuit
+  // it. The policy loader pulls in YAML and schema validation; none of that is
+  // worth loading to discover there is no policy.
+  const { loadPolicy, matchesHost, parseSshConfig } = await import('@dwara/core');
 
   let patterns: readonly string[];
   try {
