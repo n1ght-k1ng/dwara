@@ -65,48 +65,38 @@ function restart(container = NAME): ReturnType<Pipeline['execute']> {
   );
 }
 
-/** Recreates the test container. `mode` decides whether it survives boot. */
-async function makeContainer(mode: 'ok' | 'fail'): Promise<void> {
+/**
+ * Recreates the test container.
+ *
+ * Three shapes, and the distinction matters for timing. `loop` is the only one
+ * with a restart policy, because only one test needs a container actually
+ * cycling; the others would otherwise still be mid-restart when the snapshot
+ * is taken, and the recorded restart count would be stale before it was
+ * written. That raced under full-suite load and passed in isolation.
+ *
+ * `--stop-timeout 1` matters too. The command runs as PID 1, where the kernel
+ * installs no default signal handlers, so `sleep infinity` ignores SIGTERM and
+ * docker waits out the full stop timeout before SIGKILL. At the default ten
+ * seconds every restart here would outlive the tool's deadline.
+ */
+async function makeContainer(mode: 'ok' | 'loop' | 'dead'): Promise<void> {
   const command = mode === 'ok' ? 'sleep infinity' : 'sh -c "exit 1"';
-  const restartPolicy = mode === 'ok' ? 'no' : 'always';
-  // `--stop-timeout 1` matters more than it looks. The command runs as PID 1,
-  // where the kernel installs no default signal handlers, so `sleep infinity`
-  // ignores SIGTERM and docker waits out the full stop timeout before SIGKILL.
-  // At the default ten seconds every restart here would outlive the tool's
-  // deadline and the whole matrix would read as a timeout.
+  const policy = mode === 'loop' ? 'always' : 'no';
+
   await lab(
     `docker rm -f ${NAME} >/dev/null 2>&1;
-     docker run -d --name ${NAME} --stop-timeout 1 --restart=${restartPolicy} \
+     docker run -d --name ${NAME} --stop-timeout 1 --restart=${policy} \
        dwara-lab-app:dev ${command} >/dev/null`,
   );
-}
 
-/**
- * Stops the test container and waits for it to settle.
- *
- * The settle is not optional. A container created with `--restart=always` that
- * exits on boot is still cycling when `docker run -d` returns, so stopping it
- * immediately catches it mid-restart: the snapshot then records a `restarting`
- * state and a count that is still moving, and the post-rollback check compares
- * against a moment that never really existed.
- */
-async function stopAndSettle(): Promise<void> {
-  await lab(`docker update --restart=no ${NAME} >/dev/null; docker stop -t 1 ${NAME} >/dev/null`);
+  if (mode !== 'dead') return;
 
-  for (let i = 0; i < 20; i += 1) {
-    const [running, , count] = (
-      await lab(
-        `docker inspect --format '{{.State.Running}}|{{.State.Status}}|{{.RestartCount}}' ${NAME}`,
-      )
-    )
-      .trim()
-      .split('|');
-    if (running === 'false') {
-      await new Promise((done) => setTimeout(done, 300));
-      const after = (await lab(`docker inspect --format '{{.RestartCount}}' ${NAME}`)).trim();
-      if (after === count) return;
-    }
-    await new Promise((done) => setTimeout(done, 300));
+  // Exits on its own with no policy to revive it, so wait for it to be gone
+  // rather than stopping a container that is still cycling.
+  for (let i = 0; i < 40; i += 1) {
+    const running = (await lab(`docker inspect --format '{{.State.Running}}' ${NAME}`)).trim();
+    if (running === 'false') return;
+    await new Promise((done) => setTimeout(done, 250));
   }
 }
 
@@ -168,7 +158,7 @@ describeTestbed('restart_container against the lab', () => {
   it('2 · verify failure triggers an automatic rollback', async () => {
     // A container that exits on boot with --restart=always: Docker keeps
     // putting it back, so it reads as "running" at most instants you look.
-    await makeContainer('fail');
+    await makeContainer('loop');
 
     const result = await restart();
 
@@ -183,8 +173,7 @@ describeTestbed('restart_container against the lab', () => {
 
   it('2a · reports a clean rollback when the container can be put back', async () => {
     // Stopped before, so undoing means stopping it again, which always works.
-    await makeContainer('fail');
-    await stopAndSettle();
+    await makeContainer('dead');
 
     const result = await restart();
 
@@ -216,8 +205,7 @@ describeTestbed('restart_container against the lab', () => {
   }, 90_000);
 
   it('4 · rollback puts the container back in the state the snapshot recorded', async () => {
-    await makeContainer('fail');
-    await stopAndSettle();
+    await makeContainer('dead');
     expect(await state()).toMatch(/^false\|/);
 
     const result = await restart();

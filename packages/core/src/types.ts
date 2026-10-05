@@ -40,6 +40,16 @@ export interface RemoteCommand {
   readonly sudo?: boolean;
   /** Hard wall-clock limit for this command. */
   readonly timeoutMs: number;
+  /**
+   * Cap on bytes read per stream, when this command needs a tighter one than
+   * the transport's default.
+   *
+   * Sits here rather than on the tool, for the same reason `timeoutMs` does: a
+   * tool's commands do not all want the same budget. `tail_logs` asking for one
+   * line should not be allowed 64 KB of reply, which is exactly how a single
+   * enormous line made that tool useless on a runaway log.
+   */
+  readonly maxOutputBytes?: number;
   /** Fed to the command's stdin, for content too large or too structured for argv. */
   readonly stdin?: string;
 }
@@ -214,8 +224,6 @@ export interface ToolDef<I, O> {
    * the host is back as it was when it is not. Defaults to true.
    */
   readonly restorable?: boolean;
-  /** Output cap for this tool, if it differs from the transport default. */
-  readonly maxOutputBytes?: number;
 }
 
 /**

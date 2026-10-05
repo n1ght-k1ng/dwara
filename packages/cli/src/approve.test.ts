@@ -45,6 +45,40 @@ describe('formatRequest', () => {
     expect(text).toContain('exactly this, once');
   });
 
+  it('says loudly when the request would change the host', () => {
+    expect(formatRequest(request({ input: { host: 'lab-api', unit: 'nginx' } }))).toContain(
+      'CHANGES THIS HOST',
+    );
+  });
+
+  it('says a preview is only a preview, and that applying comes next', () => {
+    // The gate caught an operator approving the preview and thinking they had
+    // approved the change. Two near-identical prompts, no way to tell them
+    // apart.
+    const text = formatRequest(
+      request({
+        tool: 'config_edit_config',
+        input: { host: 'lab-api', path: '/etc/nginx/nginx.conf', mode: 'plan' },
+      }),
+    );
+
+    expect(text).toContain('preview only — writes nothing');
+    expect(text).not.toContain('CHANGES THIS HOST');
+    expect(text).toContain('Applying it is a separate request');
+  });
+
+  it('treats an apply as what it is', () => {
+    const text = formatRequest(
+      request({
+        tool: 'config_edit_config',
+        input: { host: 'lab-api', path: '/etc/nginx/nginx.conf', mode: 'apply' },
+      }),
+    );
+
+    expect(text).toContain('CHANGES THIS HOST');
+    expect(text).not.toContain('preview only');
+  });
+
   it('says so plainly when there is nothing but the host', () => {
     expect(formatRequest(request({ input: { host: 'lab-api' } }))).toContain('Arguments: none');
   });
@@ -147,10 +181,20 @@ describe('listPending', () => {
 
     const text = await listPending(dir);
 
-    expect(text).toContain(`${waiting.id}  reversible_restart_service on lab-api  (needs you)`);
-    expect(text).toContain(
-      `${decided.id}  reversible_restart_service on lab-api  (approved, not yet used)`,
-    );
+    expect(text).toContain(`${waiting.id}  reversible_restart_service on lab-api`);
+    expect(text).toContain('(needs you)');
+    expect(text).toContain(`${decided.id}  reversible_restart_service on lab-api`);
+    expect(text).toContain('(approved, not yet used)');
+  });
+
+  it('shows at a glance which pending requests would change something', async () => {
+    await store.record(request({ input: { host: 'lab-api', mode: 'plan' } }));
+    await store.record(request({ input: { host: 'lab-api', mode: 'apply' } }));
+
+    const text = await listPending(dir);
+
+    expect(text).toContain('[preview only]');
+    expect(text).toContain('[changes the host]');
   });
 
   it('marks an approval that has been spent', async () => {

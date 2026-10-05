@@ -116,8 +116,11 @@ export class SshTransport {
       subprocess.stdin?.end(command.stdin);
     }
 
-    const stdout = this.collect(subprocess, 'stdout');
-    const stderr = this.collect(subprocess, 'stderr');
+    // A command may ask for a tighter cap than the transport's default; it may
+    // never ask for a looser one, or a tool could opt itself out of the limit.
+    const cap = Math.min(command.maxOutputBytes ?? this.maxOutputBytes, this.maxOutputBytes);
+    const stdout = this.collect(subprocess, 'stdout', cap);
+    const stderr = this.collect(subprocess, 'stderr', cap);
 
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -194,6 +197,7 @@ export class SshTransport {
   private async collect(
     subprocess: Subprocess,
     stream: 'stdout' | 'stderr',
+    cap: number = this.maxOutputBytes,
   ): Promise<{ text: string; truncated: boolean }> {
     const source = subprocess[stream];
     if (!source) return { text: '', truncated: false };
@@ -205,11 +209,11 @@ export class SshTransport {
     try {
       for await (const chunk of source) {
         const buffer = Buffer.from(chunk as Uint8Array);
-        if (size >= this.maxOutputBytes) {
+        if (size >= cap) {
           truncated = true;
           continue;
         }
-        const room = this.maxOutputBytes - size;
+        const room = cap - size;
         if (buffer.length > room) {
           chunks.push(buffer.subarray(0, room));
           size += room;

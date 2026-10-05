@@ -52,11 +52,27 @@ export async function listPending(dir = DEFAULT_APPROVAL_DIR): Promise<string> {
         : granted.used_at === undefined
           ? 'approved, not yet used'
           : 'already used';
-    lines.push(`  ${request.id}  ${request.tool} on ${request.host}  (${state})`);
+    const effect = changesTheHost(request) ? 'changes the host' : 'preview only';
+    lines.push(`  ${request.id}  ${request.tool} on ${request.host}  [${effect}]  (${state})`);
   }
 
   lines.push('', 'Run `dwara approve <id>` to see the full plan and decide.');
   return lines.join('\n');
+}
+
+/**
+ * Whether this request would actually change the host.
+ *
+ * A two-step tool asks twice: once to work out what it would do, once to do
+ * it. Both are the same risk class and both stop for a human, so without this
+ * an operator sees two near-identical prompts and reasonably assumes the first
+ * one was the change. The Phase 3 exit gate caught this: the agent was granted
+ * the preview, found the write still refused, and had to explain to its own
+ * operator that they had approved the wrong step.
+ */
+function changesTheHost(request: ApprovalRequest): boolean {
+  const mode = request.input['mode'];
+  return !(typeof mode === 'string' && mode === 'plan');
 }
 
 /** The plan, written for a person deciding whether to allow it. */
@@ -65,12 +81,15 @@ export function formatRequest(request: ApprovalRequest): string {
     .filter(([key]) => key !== 'host')
     .map(([key, value]) => `    ${key}: ${JSON.stringify(value)}`);
 
+  const writes = changesTheHost(request);
+
   return [
     '',
     `  Request:  ${request.id}`,
     `  Tool:     ${request.tool}`,
     `  Host:     ${request.host}`,
     `  Risk:     ${request.risk}`,
+    `  Effect:   ${writes ? 'CHANGES THIS HOST' : 'preview only — writes nothing'}`,
     `  Asked at: ${request.created_at}`,
     '',
     args.length > 0 ? '  Arguments:' : '  Arguments: none',
@@ -81,6 +100,13 @@ export function formatRequest(request: ApprovalRequest): string {
     // Said plainly, because it is the thing people get wrong about approvals.
     '  Approving authorises exactly this, once. Different arguments, a',
     '  different host or a second attempt all need asking again.',
+    ...(writes
+      ? []
+      : [
+          '',
+          '  This one only works out what the change would be and shows it to you.',
+          '  Applying it is a separate request, which you will be asked for next.',
+        ]),
     '',
   ].join('\n');
 }

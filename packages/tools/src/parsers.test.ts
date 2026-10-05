@@ -219,6 +219,55 @@ describe('tail_logs', () => {
     expect(result.error).toBe('Failed to open journal');
   });
 
+  it('cuts a line that is enormous, and says it did', () => {
+    // The Phase 3 gate hit this: a runaway writer produced one line of ~390KB
+    // with no newlines, so a `lines: 1` read filled the whole transport cap
+    // with a fragment and the tool was useless on the one file that mattered.
+    const huge = 'x'.repeat(10_000);
+    const result = tailLogs.parse([
+      {
+        argv: ['tail', '-n', '1', '--', '/var/log/lab-api/debug.log'],
+        exitCode: 0,
+        stdout: `${huge}\n`,
+        stderr: '',
+        truncated: true,
+        durationMs: 1,
+      },
+    ]);
+
+    expect(result.lines[0]).toContain('6000 more characters on this line');
+    expect(result.lines[0]?.length).toBeLessThan(4_100);
+    expect(result.longLines).toBe(1);
+    expect(result.note).toContain('runaway process');
+  });
+
+  it('leaves ordinary lines exactly as they are', () => {
+    const result = tailLogs.parse([
+      {
+        argv: ['tail', '-n', '2', '--', '/var/log/syslog'],
+        exitCode: 0,
+        stdout: 'first line\nsecond line\n',
+        stderr: '',
+        truncated: false,
+        durationMs: 1,
+      },
+    ]);
+
+    expect(result.lines).toEqual(['first line', 'second line']);
+    expect(result.longLines).toBeUndefined();
+    expect(result.note).toBeUndefined();
+  });
+
+  it('asks the transport for a budget matching what it requested', () => {
+    // Cutting lines client-side happens after the bytes have crossed the wire.
+    // Scaling the cap to the request is what stops them crossing at all.
+    const one = tailLogs.build({ host: 'h', source: 'file', path: '/var/log/a.log', lines: 1 });
+    const many = tailLogs.build({ host: 'h', source: 'file', path: '/var/log/a.log', lines: 100 });
+
+    expect(one[0]?.maxOutputBytes).toBe(4_200);
+    expect(many[0]?.maxOutputBytes).toBe(420_000);
+  });
+
   it('refuses a file outside /var/log', () => {
     // A tool whose job is "print the end of a file" is otherwise the easiest
     // route to /etc/shadow.

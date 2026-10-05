@@ -71,3 +71,18 @@ describe('SshTransport.buildArgs', () => {
     );
   });
 });
+
+describe('per-command output cap', () => {
+  it('builds the same argv whatever the cap', () => {
+    // The cap is a client-side read limit, not something sent to the host.
+    const transport = new SshTransport({ sshConfigPath: 'testbed/ssh_config' });
+    const plain = transport.buildArgs('lab-api', { argv: ['echo', 'x'], timeoutMs: 1000 });
+    const capped = transport.buildArgs('lab-api', {
+      argv: ['echo', 'x'],
+      timeoutMs: 1000,
+      maxOutputBytes: 128,
+    });
+
+    expect(capped).toEqual(plain);
+  });
+});

@@ -37,8 +37,40 @@ export interface TailedLogs {
   readonly target: string;
   readonly count: number;
   readonly lines: readonly string[];
+  /** How many lines were cut short because they were enormous. */
+  readonly longLines?: number;
   /** Set when the host would not produce the logs, with the reason. */
   readonly error?: string;
+  /** Present when something about the read needs saying out loud. */
+  readonly note?: string;
+}
+
+/**
+ * The longest single line worth returning.
+ *
+ * A runaway writer produces one line of hundreds of kilobytes with no
+ * newlines, and the Phase 3 exit gate hit exactly that: a `lines: 1` read of a
+ * 390 KB line filled the whole 64 KB transport cap with a fragment, so the tool
+ * was useless on the one shape of file anyone would be reading it for. The
+ * transport's cap protected the agent from the volume; it could not make what
+ * came back legible.
+ *
+ * Four thousand characters is far longer than any real log line and far short
+ * of the transport cap, so a normal read is untouched and a pathological one
+ * still says what it is.
+ */
+const MAX_LINE_CHARS = 4_000;
+
+/**
+ * What this read is allowed to bring back, scaled to what it asked for.
+ *
+ * Lines are cut client-side for legibility, but that happens after the bytes
+ * have already crossed the wire. Asking the transport for a budget that
+ * matches the request stops a single pathological line consuming the whole
+ * default cap in the first place.
+ */
+function budgetFor(lineCount: number): number {
+  return lineCount * (MAX_LINE_CHARS + 200);
 }
 
 /** A systemd time spec, and nothing that could be read as another option. */
@@ -94,6 +126,7 @@ export const tailLogs: BuiltToolDef<Input, TailedLogs> = {
         {
           argv: ['tail', '-n', String(params.lines), '--', guard.path],
           timeoutMs: READ_TIMEOUT_MS,
+          maxOutputBytes: budgetFor(params.lines),
         },
       ];
     }
@@ -114,7 +147,9 @@ export const tailLogs: BuiltToolDef<Input, TailedLogs> = {
     if (params.since !== undefined) argv.push('--since', params.since.trim());
     if (params.grep !== undefined) argv.push('--grep', params.grep);
 
-    return [{ argv, sudo: true, timeoutMs: READ_TIMEOUT_MS }];
+    return [
+      { argv, sudo: true, timeoutMs: READ_TIMEOUT_MS, maxOutputBytes: budgetFor(params.lines) },
+    ];
   },
 
   parse: (raws) => {
@@ -124,7 +159,13 @@ export const tailLogs: BuiltToolDef<Input, TailedLogs> = {
       ? (argAfter(raw.argv, '-u') ?? 'whole journal')
       : (raw.argv[raw.argv.length - 1] ?? '');
 
-    const collected = lines(raw.stdout);
+    const all = lines(raw.stdout);
+    const longLines = all.filter((line) => line.length > MAX_LINE_CHARS).length;
+    const collected = all.map((line) =>
+      line.length > MAX_LINE_CHARS
+        ? `${line.slice(0, MAX_LINE_CHARS)}… [${line.length - MAX_LINE_CHARS} more characters on this line]`
+        : line,
+    );
 
     // journalctl --grep exits 1 with no output when nothing matched. That is an
     // answer, not a failure: "no lines match" is often the useful finding.
@@ -136,9 +177,15 @@ export const tailLogs: BuiltToolDef<Input, TailedLogs> = {
       target,
       count: collected.length,
       lines: collected,
+      ...(longLines === 0 ? {} : { longLines }),
       ...(raw.exitCode !== 0 && !noMatches
         ? { error: raw.stderr.trim().split('\n')[0] || `command exited ${raw.exitCode}` }
         : {}),
+      ...(longLines === 0
+        ? {}
+        : {
+            note: `${longLines} line(s) were longer than ${MAX_LINE_CHARS} characters and were cut. A log writing single enormous lines is usually a runaway process rather than normal logging; disk_usage will show whether it is filling the filesystem.`,
+          }),
     };
   },
 };

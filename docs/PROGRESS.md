@@ -397,6 +397,32 @@ Every gate run's audit chain verified.
 
 571 unit tests, 123 integration.
 
+**Task 14 — the three things the gate found (2026-10-05).** `fix(tools,core,cli)`.
+
+- **`tail_logs` on a runaway log.** Lines over 4,000 characters are now cut, counted, and explained,
+  and the read asks the transport for a budget scaled to the number of lines requested. Measured on the
+  file that broke it — a single 400 KB line — the read went from **64 KB of unusable fragment to
+  4.2 KB** and a legible line with a note pointing at `disk_usage`.
+- **`maxOutputBytes` is no longer dead.** It moved from `ToolDef`, where nothing read it and no tool set
+  it, onto `RemoteCommand`, where it sits beside `timeoutMs` as a per-command override — a tool's
+  commands do not all want the same budget. The transport takes the **smaller** of the command's cap and
+  its own, so a tool can tighten the limit and never loosen it.
+- **The approval prompt now says what it would do.** `Effect: CHANGES THIS HOST` or `preview only —
+  writes nothing`, with a line telling the operator that applying is a separate request. `--list` shows
+  it too. This is the flaw the agent itself reported in the gate transcript.
+
+Also fixed a **load-dependent flake** in the `restart_container` matrix, which passed in isolation and
+failed in the full suite. The cause was the fixture, not the code: two tests that only needed a stopped
+container were building one with `--restart=always` and then stopping it, so an in-flight restart could
+bump the count after the snapshot was taken. They now build a container with no restart policy and wait
+for it to exit, which removes the race rather than lengthening the wait.
+
+**Docker Desktop stopped again** between sessions, with `UseResourceSaver: false` and `AutoStart: true`
+still set on disk. So it was not the idle shutdown this time; most likely a reboot, since AutoStart only
+applies at login. Nothing further to change.
+
+579 unit tests, 123 integration.
+
 ## Done
 
 **Repo setup**

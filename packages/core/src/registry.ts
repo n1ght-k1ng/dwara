@@ -37,7 +37,6 @@ export interface RegisteredTool {
   readonly mcpName: string;
   readonly description: string;
   readonly risk: Risk;
-  readonly maxOutputBytes: number | undefined;
   /** The zod schema, for the MCP layer to advertise. */
   readonly inputSchema: z.ZodType;
   /** True for a tool that changes remote state. */
@@ -76,7 +75,6 @@ function erase<I, O>(tool: ToolDef<I, O>): RegisteredTool {
     mcpName: mcpName(tool),
     description: tool.description,
     risk: tool.risk,
-    maxOutputBytes: tool.maxOutputBytes,
     inputSchema: tool.input,
     mutates: tool.risk === Risk.Reversible || tool.risk === Risk.Config,
     restorable: tool.restorable !== false,
