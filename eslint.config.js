@@ -4,7 +4,15 @@ import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'testbed/app/**'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      'testbed/app/**',
+      // The plugin bundles a built copy of the hook; the source is linted
+      // where it lives, in packages/hook/src.
+      'packages/plugin-claude-code/hook/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
