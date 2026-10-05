@@ -8,6 +8,44 @@ Phase 4 — approvals, hook, Claude Code plugin, init. **In progress.**
 Phases 0 through 3 complete; **Phase 3's exit criteria all met** as of 2026-10-05,
 when the `api-crash-loop` criterion was amended rather than the scenario changed.
 
+### Phase 4 log
+
+**Tasks 2 and 3 — the PreToolUse hook (2026-10-05).** `feat(hook)`.
+
+93 tests: a 67-case evasion corpus in `packages/hook/src/evasions.ts` plus the wrapper. **Zero false
+negatives**, asserted as one statement rather than inferred from a page of green ticks.
+
+The corpus was written against **measured** `shell-quote` behaviour, and the measuring found five things
+that would each have been a silent hole:
+
+- **`ssh $HOST` parses to `['ssh', '']`.** The variable becomes an empty string, so the host does not
+  survive as anything recognisable — it simply vanishes, and a detector looking for a managed hostname
+  finds nothing and allows it.
+- **`bash -c "ssh $H"` parses to `['bash','-c','ssh ']`.** The variable is erased *inside* the string,
+  so by the time there are tokens there is no trace there ever was one. Caught by checking the raw text
+  for a variable reference before parsing.
+- **Backticks are never interpreted.** `` `ssh lab-api x` `` yields ``['`ssh', ...]`` — the verb wears a
+  stray backtick and an equality check on `'ssh'` misses it.
+- **Inside double quotes, `$(...)` is NOT flattened.** `echo "$(ssh lab-api x)"` comes back as one
+  literal token, so the inner command never becomes tokens at all. Unquoted, the same substitution *is*
+  flattened. Both shapes now go through a raw-text substitution extractor.
+- **Unbalanced quotes do not throw.** `ssh lab-api"` parses cleanly, so a parse failure cannot be relied
+  on to catch malformed input.
+
+Quote-splitting (`s''sh`) and backslashes (`\ssh`) are normalised back to `ssh` by the parser and need
+no handling — they are in the corpus so a future parser change that stops normalising them fails a test
+instead of opening a hole.
+
+The verdict is **three-valued**. `unreadable` is not a hedge: it is the honest answer when a command
+could reach a managed host and the hook cannot tell, and it is reported as that rather than dressed up
+as a match. A denial names the host, the verb, and the Dwara tool to use instead — a block the model
+cannot act on just produces a second attempt.
+
+**With no policy, the hook stays silent**, including for commands it would otherwise refuse. A plugin
+installed globally must not break the projects that do not use Dwara.
+
+671 unit tests.
+
 ## Phase 3 exit criteria
 
 - [x] Every mutating tool has the full test matrix passing on the testbed — six tools,

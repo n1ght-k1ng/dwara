@@ -25,5 +25,12 @@
   },
   "bin": {
     "dwara-hook": "./dist/index.js"
+  },
+  "dependencies": {
+    "@dwara/core": "workspace:*",
+    "shell-quote": "^1.10.0"
+  },
+  "devDependencies": {
+    "@types/shell-quote": "^1.7.5"
   }
 }

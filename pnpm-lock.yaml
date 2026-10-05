@@ -73,7 +73,18 @@ importers:
         specifier: ^1.7.5
         version: 1.7.5
 
-  packages/hook: {}
+  packages/hook:
+    dependencies:
+      '@dwara/core':
+        specifier: workspace:*
+        version: link:../core
+      shell-quote:
+        specifier: ^1.10.0
+        version: 1.10.0
+    devDependencies:
+      '@types/shell-quote':
+        specifier: ^1.7.5
+        version: 1.7.5
 
   packages/mcp-server:
     dependencies:
