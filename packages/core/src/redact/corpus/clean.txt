@@ -115,7 +115,7 @@ Consider setting a password for this instance
 subject=CN=lab-api, O=Dwara Testbed
 notAfter=Sep 22 06:59:33 2027 GMT
 SHA256 Fingerprint=A1:B2:C3:D4:E5:F6:07:18:29:3A:4B:5C:6D:7E:8F:90:A1:B2:C3:D4:E5:F6:07:18:29:3A:4B:5C:6D:7E:8F:90
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPurgedFromHistoryNotARealKey0000 host key
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILEjRObCquALLbMj+91wQz46wuRZn5Enm8OU293taiTl fixture-host-key-not-a-real-key
 ECDSA key fingerprint is SHA256:9f2a4c6e0b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3
 X.509 serial 6c656166
 
