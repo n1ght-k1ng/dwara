@@ -4,9 +4,9 @@ Handoff notes between Claude Code sessions. Update after every task.
 
 ## Current phase
 
-Phase 3 — mutations: snapshots, verifier, reversible and config tools, rollback.
-**Code complete; exit criteria 3 of 4 met, with one open decision.** Phases 0, 1 and
-2 complete before it.
+Phase 4 — approvals, hook, Claude Code plugin, init. **In progress.**
+Phases 0 through 3 complete; **Phase 3's exit criteria all met** as of 2026-10-05,
+when the `api-crash-loop` criterion was amended rather than the scenario changed.
 
 ## Phase 3 exit criteria
 
@@ -15,10 +15,10 @@ Phase 3 — mutations: snapshots, verifier, reversible and config tools, rollbac
       restores the recorded state, and idempotent re-run.
 - [x] A deliberately bad fix is automatically rolled back and reported.
 - [x] `dwara audit verify` passes after every gate run.
-- [~] Claude Code fixes `api-crash-loop`, `disk-full-logs` and `nginx-bad-config` end to
-      end. **Two of three.** `api-crash-loop`'s fix requires editing a credentials file
-      or changing a database password, both of which Dwara refuses by design. The agent
-      diagnosed it correctly and refused correctly. See the Task 13 notes.
+- [x] Claude Code fixes `disk-full-logs` and `nginx-bad-config` end to end, and on
+      `api-crash-loop` diagnoses correctly, refuses correctly, and names the exact fix.
+      **Criterion amended 2026-10-05** rather than the scenario: see `docs/PLAN.md`.
+      Phase 5 adopts `api-crash-loop` as an explicit should-refuse case.
 
 ### Phase 3 log
 

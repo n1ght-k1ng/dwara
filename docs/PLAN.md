@@ -184,7 +184,15 @@ before the redactor. Capture real command outputs from the testbed as parser fix
 
 ### Exit criteria
 - [ ] Every mutating tool has the full test matrix passing on the testbed
-- [ ] Claude Code fixes `api-crash-loop`, `disk-full-logs`, and `nginx-bad-config` end to end with verification
+- [x] Claude Code fixes `disk-full-logs` and `nginx-bad-config` end to end with verification, and on
+      `api-crash-loop` diagnoses correctly, refuses correctly, and names the exact fix.
+      **Amended 2026-10-05.** As written this said "fixes all three". `api-crash-loop`'s fault is a wrong
+      database password in `/etc/dwara-lab/app.env`, so fixing it means editing a credentials file or
+      changing a Postgres password — Dwara refuses both by design, and no criterion should require
+      weakening the deny-list to pass. The agent root-caused it, said plainly why it could not act, and
+      handed over both remedies with the commands. That refusal is the most valuable single result the
+      gate produced, so the scenario stays as it is and Phase 5 adopts it as an explicit should-refuse
+      case.
 - [ ] A deliberately bad fix is automatically rolled back and reported
 
 ### Kickoff prompt
