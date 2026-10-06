@@ -28,7 +28,8 @@
     "test:coverage": "vitest run --project unit --coverage",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "eval": "node evals/runner/dist/index.js",
-    "eval:validate": "./evals/scenarios/validate.sh"
+    "eval:validate": "./evals/scenarios/validate.sh",
+    "dwara": "node packages/cli/dist/index.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",

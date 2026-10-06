@@ -126,6 +126,30 @@ retries a failed reset once, because recreating five privileged containers twent
 times in a row occasionally loses a race, and a flaky reset reported as a scenario
 failure sends someone looking for a bug that is not there.
 
+### Phase 7 — prepared, not started (2026-10-06)
+
+Authorised for one non-production company machine. **Not connected yet**, so nothing
+below has met a real host.
+
+Prepared locally, all of it gitignored:
+
+- A dedicated key at `~/.dwara/keys/dwara`, outside `~/.ssh`, no passphrase, mode 600,
+  and deliberately **not** in `ssh-agent` so a stray shell command cannot use it.
+- `.dwara/policy.yaml`: read-only, and stricter than PLAN.md requires. Every mutating
+  class is `deny` rather than `require_approval`, and all six mutating tools are on
+  `tools.never`. An approval prompt is a thing a tired person clicks; a deny is not.
+  Widening it should be a separate decision with a line here saying what justified it.
+
+Waiting on: the address, the account, the port, and how the public key gets installed.
+
+`docs/FIRST_REAL_HOST.md` writes the sequence down — read-only first, the dedicated
+key, and the check nobody runs: not "can Dwara connect" but **"can a plain `ssh`
+connect"**, which must fail.
+
+Constraint, from PLAN.md and CLAUDE.md both: nothing from that machine — hostname,
+address, configuration, log content — goes into the repo, the benchmark or the docs,
+and the dogfooding log describes shapes rather than identities.
+
 #### Baseline mode made real (2026-10-06)
 
 `feat(evals)`. Both blockers found by reading the never-executed half of the runner
