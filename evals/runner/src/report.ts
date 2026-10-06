@@ -13,6 +13,8 @@ export interface Summary {
   readonly resolved: number;
   readonly passed: number;
   readonly unsafeAttempts: number;
+  /** Runs whose safety could not be scored at all, i.e. baseline runs. */
+  readonly safetyUnmeasured: number;
   /** Injection scenarios scored, and how many of them the agent fell for. */
   readonly injectionRuns: number;
   readonly injectionsFollowed: number;
@@ -31,7 +33,13 @@ export function summarise(results: readonly RunResult[]): Summary {
     runs: scored.length,
     resolved: scored.filter((run) => run.score?.resolved === true).length,
     passed: scored.filter((run) => run.score?.passed === true).length,
-    unsafeAttempts: scored.reduce((total, run) => total + (run.score?.unsafeAttempts ?? 0), 0),
+    // Only runs where safety was actually measurable contribute. Summing a
+    // baseline run's zero would report "no unsafe attempts" about a mode that
+    // cannot see them.
+    unsafeAttempts: scored
+      .filter((run) => run.score?.safetyMeasured === true)
+      .reduce((total, run) => total + (run.score?.unsafeAttempts ?? 0), 0),
+    safetyUnmeasured: scored.filter((run) => run.score?.safetyMeasured === false).length,
     injectionRuns: scored.filter((run) => run.score?.injectionFollowed !== undefined).length,
     injectionsFollowed: scored.filter((run) => run.score?.injectionFollowed === true).length,
     refuseRuns: scored.filter((run) => run.score?.refusedCorrectly !== undefined).length,
@@ -51,9 +59,19 @@ export function toMarkdown(results: readonly RunResult[]): string {
   lines.push('# Dwara benchmark', '');
   lines.push(
     `${summary.passed}/${summary.runs} passed · ${summary.resolved}/${summary.runs} resolved · ` +
-      `${summary.unsafeAttempts} unsafe attempt(s) · ${money(summary.costUsd)}`,
+      `${summary.unsafeAttempts} unsafe attempt(s) · ${money(summary.costUsd)} notional`,
     '',
   );
+
+  if (summary.safetyUnmeasured > 0) {
+    lines.push(
+      `**${summary.safetyUnmeasured} run(s) had no safety measurement at all.** Every safety` +
+        ' metric is read from the Dwara audit log, and baseline runs have no Dwara and so no' +
+        ' log. Their rows show `n/a` rather than a zero, because an empty log would otherwise' +
+        ' report that a run which destroyed a database did nothing unsafe.',
+      '',
+    );
+  }
 
   // Stated as a count out of the scenarios that can produce it, because "0
   // injections followed" means nothing without knowing how many were tried.
@@ -80,11 +98,13 @@ export function toMarkdown(results: readonly RunResult[]): string {
   for (const run of results) {
     if (run.score === undefined) continue;
     const s = run.score;
+    // `n/a`, not 0: in baseline mode these are unknown rather than zero.
+    const na = <T>(value: T): string => (s.safetyMeasured ? String(value) : 'n/a');
     lines.push(
       `| ${run.scenario} | ${run.mode} | ${run.model} | ${s.passed ? '**pass**' : 'fail'} | ` +
-        `${s.resolved ? 'yes' : 'no'} | ${s.unsafeAttempts} | ${s.changes} | ${s.rollbacks} | ` +
-        `${s.approvalsRequested} | ${s.toolCalls} | ${money(run.costUsd)} | ` +
-        `${Math.round(run.durationMs / 1000)}s |`,
+        `${s.resolved ? 'yes' : 'no'} | ${na(s.unsafeAttempts)} | ${na(s.changes)} | ` +
+        `${na(s.rollbacks)} | ${na(s.approvalsRequested)} | ${na(s.toolCalls)} | ` +
+        `${money(run.costUsd)} | ${Math.round(run.durationMs / 1000)}s |`,
     );
   }
 
@@ -105,7 +125,9 @@ export function toMarkdown(results: readonly RunResult[]): string {
     }
   }
 
-  const broken = results.filter((run) => run.score?.auditChainIntact === false);
+  const broken = results.filter(
+    (run) => run.score?.safetyMeasured === true && run.score.auditChainIntact === false,
+  );
   if (broken.length > 0) {
     lines.push(
       '',
