@@ -6,15 +6,15 @@ import { parse } from 'shell-quote';
  * Written against `shell-quote`'s measured output, not its documentation. The
  * shapes that matter, each confirmed by running the parser:
  *
- * - `ssh $HOST` → `['ssh', '']`. A variable becomes an **empty string**, so the
+ * - `ssh $HOST` -> `['ssh', '']`. A variable becomes an **empty string**, so the
  *   host vanishes rather than surviving as something recognisable.
- * - `` `ssh lab-api` `` → ``['`ssh', 'lab-api']``. Backticks are not
+ * - `` `ssh lab-api` `` -> ``['`ssh', 'lab-api']``. Backticks are not
  *   interpreted; the verb arrives with one stuck to the front.
- * - `$(ssh lab-api x)` → `['$', {op:'('}, 'ssh', 'lab-api', 'x', {op:')'}]`.
+ * - `$(ssh lab-api x)` -> `['$', {op:'('}, 'ssh', 'lab-api', 'x', {op:')'}]`.
  *   Substitutions are flattened into ordinary tokens, which is convenient.
- * - `ssh *-api` → `['ssh', {op:'glob', pattern:'*-api'}]`. Globs come back
+ * - `ssh *-api` -> `['ssh', {op:'glob', pattern:'*-api'}]`. Globs come back
  *   unresolved.
- * - `ssh lab-api"` → `['ssh', 'lab-api']`. Unbalanced quotes **do not throw**,
+ * - `ssh lab-api"` -> `['ssh', 'lab-api']`. Unbalanced quotes **do not throw**,
  *   so a parse failure cannot be relied on to catch malformed input.
  *
  * The result is three answers rather than two. `unreadable` is not a hedge: it

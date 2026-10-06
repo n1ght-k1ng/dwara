@@ -11,25 +11,25 @@ Windows servers, multi-user approvals, destructive tools.
 ## 2. High-level architecture
 
 ```
-Developer machine                                          Servers
-┌───────────────────────────────────────────────┐
-│ Coding agent (Claude Code, Codex, Cursor, …)  │
-│   │ MCP (stdio)             │ Bash tool       │
-│   ▼                         ▼                 │
-│ ┌─────────────┐      ┌──────────────┐         │
-│ │ MCP server  │      │ PreToolUse   │ blocks  │
-│ └─────┬───────┘      │ hook         │ raw ssh │
-│       ▼              └──────────────┘         │
-│ ┌──────────────── Core ──────────────────┐    │
-│ │ Registry → Policy → Snapshot → Execute │    │
-│ │ → Verify → Redact → Audit              │    │
-│ └─────────────────┬──────────────────────┘    │
-│                   ▼                           │
-│      SSH transport (system ssh, ControlMaster)│── SSH ──▶ hosts
-│ CLI: init · doctor · approve · audit ·        │
-│      rollback · eval                          │
-│ .dwara/: policy.yaml · runbooks/ · audit     │
-└───────────────────────────────────────────────┘
+DEVELOPER MACHINE                                  SERVERS
+
+  Coding agent (Claude Code, Codex, Cursor, ...)
+       |                              |
+       | MCP over stdio               | Bash tool
+       v                              v
+  MCP server                     PreToolUse hook
+       |                              |
+       |                              +--> blocks raw ssh
+       v
+  Core
+    Registry -> Policy -> Snapshot -> Execute
+             -> Verify  -> Redact   -> Audit
+       |
+       v
+  SSH transport (system ssh, ControlMaster)  ------>  managed hosts
+
+  CLI:      init, doctor, approve, audit, rollback, eval
+  .dwara/:  policy.yaml, runbooks/, audit.jsonl
 ```
 
 | Component | Responsibility |
@@ -50,7 +50,7 @@ Developer machine                                          Servers
 ## 3. Tool call pipeline
 
 1. Validate input with zod.
-2. Resolve host against SSH config and policy (unknown host → deny).
+2. Resolve host against SSH config and policy (unknown host -> deny).
 3. Policy decision: allow / approval / deny.
 4. If approval required: return plan + plan hash + approval ID; stop.
 5. Snapshot if the tool mutates state.
@@ -129,8 +129,8 @@ limits:
 ```
 
 **Evaluation:**
-1. Host not in SSH config or policy → deny.
-2. Tool in `never` → deny.
+1. Host not in SSH config or policy -> deny.
+2. Tool in `never` -> deny.
 3. Most specific host rule merged over defaults.
 4. Precedence: deny > require_approval > allow.
 5. Overrides applied; can never loosen `never` or `deny`.
@@ -168,15 +168,15 @@ MCP tool names are prefixed by risk (`read_*`, `reversible_*`, `config_*`) so cl
 1. **Client permission prompts** (Claude Code): plugin settings auto-allow `read_*`, prompt for others.
 2. **Plan binding:** `config_*` tools first return a plan (diff, commands, validator, rollback) and plan hash
    without executing; apply requires the identical hash.
-3. **CLI fallback:** `approval_required` with ID → user runs `dwara approve <id>` → short-lived approval bound to
-   plan hash stored locally → agent retries.
+3. **CLI fallback:** `approval_required` with ID -> user runs `dwara approve <id>` -> short-lived approval bound to
+   plan hash stored locally -> agent retries.
 4. No MCP tool can create or modify approvals.
 
 ## 10. Snapshots and rollback
 
 - Server path: `/var/lib/dwara/snapshots/<id>/` with files, modes, owners, SHA-256, `meta.json`.
 - Snapshot ID recorded in the local audit log.
-- edit_config: snapshot → apply diff → validator → reload → verify; failure at any step → restore + reload.
+- edit_config: snapshot -> apply diff -> validator -> reload -> verify; failure at any step -> restore + reload.
 - Retention: last 20 per host or 7 days.
 - `dwara rollback <id>` works without the agent.
 
@@ -246,7 +246,7 @@ MCP tool names are prefixed by risk (`read_*`, `reversible_*`, `config_*`) so cl
 
 - Scenario: `compose.yaml`/overlay, `break.sh`, `prompt.txt`, `check.sh`, `meta.yaml`.
 - 20 scenarios: 12 fix, 5 injection, 3 should-refuse.
-- Runner: reset → break → headless agent run (`claude -p` with Dwara MCP config) → collect audit → check → score →
+- Runner: reset -> break -> headless agent run (`claude -p` with Dwara MCP config) -> collect audit -> check -> score ->
   reset. Baseline mode: raw SSH without Dwara.
 - Metrics: resolution rate, unsafe attempts, injection success rate, correct refusals, tool calls, tokens, cost,
   time to resolution.

@@ -15,5 +15,8 @@
     "build": "mkdir -p hook && cp ../hook/dist/standalone.js hook/index.js",
     "clean": "rm -rf hook"
   },
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "@dwara/hook": "workspace:*"
+  }
 }

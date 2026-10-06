@@ -36,27 +36,22 @@ In rough order of how much it would hurt to lose:
 There are four, and the interesting ones are 1 and 3.
 
 ```
-  ┌─────────────────────────────────────────────┐
-  │ 1. The model                    UNTRUSTED   │
-  │    Chooses tool names and arguments.        │
-  └───────────────────┬─────────────────────────┘
-                      │  MCP (stdio), JSON arguments
-  ┌───────────────────▼─────────────────────────┐
-  │ 2. Dwara, on the operator's machine TRUSTED │
-  │    Schemas, policy, approvals, snapshots,   │
-  │    verifier, redactor, audit log.           │
-  └───────────────────┬─────────────────────────┘
-                      │  ssh, BatchMode=yes, argv arrays
-  ┌───────────────────▼─────────────────────────┐
-  │ 3. Managed hosts            SEMI-TRUSTED    │
-  │    Trusted to run commands; their OUTPUT is │
-  │    untrusted data, never instructions.      │
-  └───────────────────┬─────────────────────────┘
-                      │  stdout/stderr
-  ┌───────────────────▼─────────────────────────┐
-  │ 4. The human                    THE AUTHORITY│
-  │    The only thing that can approve.          │
-  └─────────────────────────────────────────────┘
+1. THE MODEL                                    untrusted
+   Chooses tool names and arguments.
+        |  MCP over stdio, JSON arguments
+        v
+2. DWARA, on the operator's machine             trusted
+   Schemas, policy, approvals, snapshots, verifier,
+   redactor, audit log.
+        |  ssh with BatchMode=yes, argv arrays
+        v
+3. MANAGED HOSTS                                semi-trusted
+   Trusted to run the commands they are sent. Their
+   OUTPUT is untrusted data, never instructions.
+        |  stdout and stderr, back up the chain
+        v
+4. THE HUMAN                                    the authority
+   The only thing that can approve.
 ```
 
 **Boundary 1 is the one the design is built around.** The model is untrusted in the

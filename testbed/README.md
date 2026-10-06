@@ -21,11 +21,11 @@ Each host is an Ubuntu 24.04 container running systemd as PID 1 with sshd, a
 
 | Host          | SSH  | Also exposed | Runs                                                 |
 | ------------- | ---- | ------------ | ---------------------------------------------------- |
-| `lab-api`     | 2201 | 8443 → 443   | nginx (self-signed TLS) + Docker running the lab app |
+| `lab-api`     | 2201 | 8443 -> 443  | nginx (self-signed TLS) + Docker running the lab app |
 | `lab-db`      | 2202 | —            | PostgreSQL 16 (systemd), seeded `labdb`              |
 | `lab-cache`   | 2203 | —            | Redis 7 (systemd), 64 MB maxmemory                   |
 | `lab-queue`   | 2204 | —            | Docker running single-node Kafka (KRaft)             |
-| `lab-staging` | 2205 | 8444 → 443   | same image as `lab-api`, tagged staging              |
+| `lab-staging` | 2205 | 8444 -> 443  | same image as `lab-api`, tagged staging              |
 
 All ports bind to `127.0.0.1` only.
 

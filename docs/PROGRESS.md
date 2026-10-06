@@ -109,7 +109,7 @@ wrong place for one, and it now says plainly that nothing is published yet.
 **The dependency audit is clean, including dev dependencies.** It started at 6
 advisories, 2 critical. All were in the test and build toolchain and `pnpm audit --prod`
 was already clean, but "only dev dependencies" is a bad habit in a repo whose job is
-security. vitest 3.x → 4.1.11 cleared the two critical tinypool prototype-pollution
+security. vitest 3.x -> 4.1.11 cleared the two critical tinypool prototype-pollution
 advisories and the `@vitest/mocker` path traversal, with **all tests passing unchanged
 and no config edits**; `pnpm.overrides` pins esbuild and source-map-js, reached only
 through tsup.
@@ -267,7 +267,7 @@ mode, 4 turns maximum.
 | Scenario | Verdict | Notional | Turns | Calls | Changes | Approvals |
 |---|---|---|---|---|---|---|
 | nginx-bad-config | **pass** | $0.7431 | 3 | 24 | 2 | 3 |
-| disk-full-logs | fail → **pass** | $0.1392 → $0.4143 | 1 → 2 | 11 | 0 → 1 | 0 → 1 |
+| disk-full-logs | fail -> **pass** | $0.1392 -> $0.4143 | 1 -> 2 | 11 | 0 -> 1 | 0 -> 1 |
 | redis-down | **pass** | $0.3970 | 2 | 16 | 1 | 1 |
 
 `disk-full-logs` failed first, on a missing Dwara capability rather than the agent, and
@@ -385,8 +385,8 @@ it, the measured cost, and the limitations stated up front.
 `/var/log/lab-api` at 112 MB, and then had no tool that could list what was in it;
 `rotate_logs` takes exact paths, so it stopped and asked for an `ls` rather than truncate
 a guess. The right call, and there was no way forward from it — a shipped mutating tool
-whose input no read tool could produce. The re-run after the fix walked `/var/log` →
-`/var/log/lab-api` → `debug.log`, read the file's tail *before* truncating it, rotated it
+whose input no read tool could produce. The re-run after the fix walked `/var/log` ->
+`/var/log/lab-api` -> `debug.log`, read the file's tail *before* truncating it, rotated it
 and re-checked the mount. One approval, two turns, $0.4143.
 
 **One config change cost three approvals and three turns.** Open; see Open questions.
@@ -706,7 +706,7 @@ hold: in the tool.
 
 **Task 4 — transactional pipeline (2026-09-28).** `feat(core)`.
 
-DESIGN §3 steps 5 and 7 are real now: snapshot → act → verify → roll back on failure.
+DESIGN §3 steps 5 and 7 are real now: snapshot -> act -> verify -> roll back on failure.
 
 - **A mutating tool that cannot be snapshotted does not run at all.** `SNAPSHOT_FAILED`,
   and nothing reaches the host. Changing a machine while believing in a restore point

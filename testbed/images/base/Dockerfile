@@ -78,7 +78,7 @@ RUN userdel -r ubuntu 2>/dev/null || true \
 COPY sudoers/dwara-common /etc/sudoers.d/dwara-common
 RUN chmod 440 /etc/sudoers.d/dwara-common && visudo -c -q
 
-# ── the benchmark baseline's login ──────────────────────────────────────────
+# the benchmark baseline's login
 #
 # `baseline` has unrestricted root. That is the point: the baseline is supposed to
 # represent an agent with raw SSH and nothing stopping it, and a baseline confined

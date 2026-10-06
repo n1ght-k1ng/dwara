@@ -33,7 +33,7 @@ hosts:
   - match: "lab-*"
 `;
 
-// ───────────────────────────── A · Host resolution ─────────────────────────────
+// A · Host resolution
 
 describe('A · host resolution', () => {
   // Case 1
@@ -75,7 +75,7 @@ describe('A · host resolution', () => {
   });
 });
 
-// ─────────────────────────────── B · Specificity ───────────────────────────────
+// B · Specificity
 
 describe('B · specificity', () => {
   // Case 7
@@ -192,7 +192,7 @@ hosts:
   });
 });
 
-// ────────────────────────── C · Specificity-wins merge ──────────────────────────
+// C · Specificity-wins merge
 
 describe('C · merge semantics', () => {
   // Case 14: the reason this semantics was chosen — DESIGN's own staging example
@@ -303,7 +303,7 @@ hosts:
   });
 });
 
-// ───────────────────────────── D · The never list ─────────────────────────────
+// D · The never list
 
 describe('D · tools.never', () => {
   const never = `
@@ -346,7 +346,7 @@ tools:
   });
 });
 
-// ──────────────────────────── E · Tool overrides ────────────────────────────
+// E · Tool overrides
 
 describe('E · tool overrides', () => {
   const base = `
@@ -421,7 +421,7 @@ tools:
   });
 });
 
-// ───────────────────────────── F · Hard floors ─────────────────────────────
+// F · Hard floors
 
 describe('F · destructive is a floor in code', () => {
   const permissive = `
@@ -448,7 +448,7 @@ tools:
   });
 });
 
-// ───────────────────────────── G · Session limits ─────────────────────────────
+// G · Session limits
 
 describe('G · limits', () => {
   const limited = `
@@ -534,7 +534,7 @@ limits:
   });
 });
 
-// ──────────────────────────── I · Decision reporting ────────────────────────────
+// I · Decision reporting
 
 describe('I · decision reporting', () => {
   // Cases 49-51

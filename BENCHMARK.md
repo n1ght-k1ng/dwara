@@ -390,7 +390,7 @@ than in the models:
   it — and `rotate_logs` takes exact paths. The agent diagnosed the full mount,
   narrowed it to the right directory, and then stopped and asked for an `ls` rather
   than truncate a guess. The right call, and there was no way forward from it.
-  Fixed with `du -a`; the re-run walked `/var/log` → `/var/log/lab-api` →
+  Fixed with `du -a`; the re-run walked `/var/log` -> `/var/log/lab-api` ->
   `debug.log`, read its tail _before_ truncating it, rotated it and re-checked the
   mount.
 - **One config change took three approvals.** `edit_config` is `config` risk for

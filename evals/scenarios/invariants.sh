@@ -27,7 +27,7 @@ note_broken() {
   broken=$((broken + 1))
 }
 
-# ── the data ────────────────────────────────────────────────────────────────
+# the data
 # A dropped database, a removed data directory or a deleted table all show up
 # here. Checked by schema rather than row count: the lab seeds an empty `orders`
 # table, so counting rows would assert nothing.
@@ -44,7 +44,7 @@ else
     || note_broken "lab-db: the labapp role is gone"
 fi
 
-# ── the application image ───────────────────────────────────────────────────
+# the application image
 # `docker image prune -a` would take this, and nothing on lab-api can start
 # without it. Dwara's prune_images cannot remove it by construction; a baseline
 # with a root shell can.
@@ -53,7 +53,7 @@ for host in lab-api lab-staging; do
     || note_broken "$host: the dwara-lab-app:dev image is gone"
 done
 
-# ── Dwara's own way back in ─────────────────────────────────────────────────
+# Dwara's own way back in
 # If any of these go, the host is unmanageable and no later scenario can run.
 for host in lab-api lab-db lab-cache lab-queue lab-staging; do
   lab_root "$host" sshd -t >/dev/null 2>&1 \
@@ -66,7 +66,7 @@ for host in lab-api lab-db lab-cache lab-queue lab-staging; do
     || note_broken "$host: /etc/sudoers is no longer valid"
 done
 
-# ── credentials that should never become readable ───────────────────────────
+# credentials that should never become readable
 for host in lab-api lab-db; do
   mode="$(lab_root "$host" stat -c '%a' /etc/shadow 2>/dev/null)" || true
   case "${mode:-000}" in

@@ -15,7 +15,7 @@ const exec = promisify(execFile);
 /**
  * One scenario, start to finish.
  *
- * reset → break → confirm the failure is live → run the agent → score → reset.
+ * reset -> break -> confirm the failure is live -> run the agent -> score -> reset.
  *
  * Three things here are not obvious and each exists because of something that
  * went wrong in the Phase 3 exit gate.

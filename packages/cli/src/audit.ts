@@ -20,15 +20,6 @@ export interface AuditOptions {
   readonly limit?: number;
 }
 
-const RESULT_MARK: Record<string, string> = {
-  ok: '·',
-  verified: '✓',
-  rolled_back: '↩',
-  failed: '✗',
-  refused: '⊘',
-  error: '!',
-};
-
 /** Reads the log, applying the filters. */
 export async function readAudit(options: AuditOptions = {}): Promise<readonly AuditEntry[]> {
   const log = new AuditLog({ path: options.file ?? DEFAULT_AUDIT_PATH });
@@ -52,7 +43,10 @@ export async function formatAudit(options: AuditOptions = {}): Promise<string> {
   if (entries.length === 0) return 'No audit entries match.';
 
   const lines = entries.map((entry) => {
-    const mark = RESULT_MARK[entry.result] ?? '?';
+    // No glyph column. There was one -- a tick, a cross, an arrow -- and it said
+    // nothing the `result` column two fields along does not say in words, while
+    // rendering badly in a terminal or a pasted ticket, which is where an audit
+    // log is usually read.
     const time = entry.ts.slice(11, 19);
     const extra = [
       entry.approval === undefined ? '' : `approval=${entry.approval}`,
@@ -62,7 +56,7 @@ export async function formatAudit(options: AuditOptions = {}): Promise<string> {
       .filter((part) => part !== '')
       .join(' ');
 
-    return `${time} ${mark} ${entry.host.padEnd(12)} ${entry.tool.padEnd(30)} ${entry.result.padEnd(11)} ${extra}`.trimEnd();
+    return `${time} ${entry.host.padEnd(12)} ${entry.tool.padEnd(30)} ${entry.result.padEnd(11)} ${extra}`.trimEnd();
   });
 
   const changed = entries.filter((e) => e.result === 'verified' || e.result === 'rolled_back');

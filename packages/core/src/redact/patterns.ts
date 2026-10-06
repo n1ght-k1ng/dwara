@@ -36,7 +36,7 @@ const SECRET_KEY =
 const KEY_PREFIX = '[a-z0-9_]*';
 
 export const RULES: readonly RedactionRule[] = [
-  // ── private key material ────────────────────────────────────────────────
+  // private key material
   {
     name: 'private-key',
     pattern:
@@ -51,7 +51,7 @@ export const RULES: readonly RedactionRule[] = [
   { name: 'private-key-body', pattern: /\bMII[A-Za-z0-9+/]{40,}={0,2}/g },
   { name: 'private-key-body', pattern: /\bLS0tLS1CRUdJTi[A-Za-z0-9+/]{20,}={0,2}/g },
 
-  // ── cloud provider keys ─────────────────────────────────────────────────
+  // cloud provider keys
   { name: 'aws-access-key', pattern: /\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b/g },
   {
     name: 'aws-secret-key',
@@ -63,7 +63,7 @@ export const RULES: readonly RedactionRule[] = [
   { name: 'gcp-oauth-token', pattern: /\bya29\.[A-Za-z0-9._-]{20,}/g },
   { name: 'gcp-service-key', pattern: /\bGOOG[A-Z0-9]{20,}\b/g },
 
-  // ── vendor tokens with recognisable prefixes ────────────────────────────
+  // vendor tokens with recognisable prefixes
   { name: 'github-token', pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}\b/g },
   { name: 'github-token', pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g },
   { name: 'gitlab-token', pattern: /\b(?:glpat|glcbt)-[A-Za-z0-9_-]{16,}\b/g },
@@ -86,7 +86,7 @@ export const RULES: readonly RedactionRule[] = [
   { name: 'newrelic-key', pattern: /\b[a-z]{2}\d{2}xx[A-Za-z0-9]{20,}NRAL\b/g },
   { name: 'twilio-sid', pattern: /\bAC[a-f0-9]{32}\b/gi },
 
-  // ── JWTs and authorization headers ──────────────────────────────────────
+  // JWTs and authorization headers
   { name: 'jwt', pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g },
   { name: 'jwt', pattern: /\beyJ[A-Za-z0-9_-]{20,}/g },
   {
@@ -115,7 +115,7 @@ export const RULES: readonly RedactionRule[] = [
     group: 2,
   },
 
-  // ── credentials inside URLs and connection strings ──────────────────────
+  // credentials inside URLs and connection strings
   {
     // The username may be empty — `redis://:password@host` is ordinary.
     name: 'url-credentials',
@@ -133,7 +133,7 @@ export const RULES: readonly RedactionRule[] = [
     group: 2,
   },
 
-  // ── unix credential shapes ──────────────────────────────────────────────
+  // unix credential shapes
   { name: 'unix-hash', pattern: /\$(?:1|2[aby]?|5|6|y)\$[^\s:]{8,}/g },
   { name: 'apr1-hash', pattern: /\$apr1\$[^\s:]{8,}/g },
   {
@@ -145,14 +145,14 @@ export const RULES: readonly RedactionRule[] = [
     group: 2,
   },
 
-  // ── command-line credentials ────────────────────────────────────────────
+  // command-line credentials
   { name: 'cli-password', pattern: /(--password[= ]+)(["']?)([^\s"']{4,})\2/gi, group: 3 },
   { name: 'cli-password', pattern: /(^|\s)-p\s+(["'])([^"']{4,})\2/gm, group: 3 },
   { name: 'cli-password', pattern: /(\bsshpass\s+-p\s+)(["']?)([^\s"']{4,})\2/gi, group: 3 },
   { name: 'cli-password', pattern: /(\bdocker\s+login\b[^\n]*?\s-p\s+)(\S{8,})/gi, group: 2 },
   { name: 'curl-userinfo', pattern: /(\bcurl\b[^\n]*?\s-u\s+)([^\s:]+:)(\S+)/gi, group: 3 },
 
-  // ── the general case: a secret-ish key with any value ───────────────────
+  // the general case: a secret-ish key with any value
   {
     name: 'secret-assignment',
     pattern: new RegExp(

@@ -128,7 +128,7 @@ Do not add any tool definitions yet. Show me the policy test table before implem
 **Goal:** Claude Code can diagnose testbed failures safely.
 
 ### Tasks
-1. Tool registry and execution pipeline (validate → resolve host → policy → execute → parse → redact → audit).
+1. Tool registry and execution pipeline (validate -> resolve host -> policy -> execute -> parse -> redact -> audit).
 2. Read-only tools: `host_overview`, `service_status`, `tail_logs`, `disk_usage`, `docker_ps`, `container_logs`,
    `container_inspect`, `open_ports`, `cert_expiry`, `read_config` (allowlisted paths), `security_audit`.
 3. Redactor with pattern rules and entropy check; `[REDACTED:type]` markers; extra patterns from policy.

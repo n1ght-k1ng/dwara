@@ -11,9 +11,9 @@ Work in this order, and stop as soon as the evidence points somewhere specific:
 
 1. `read_host_overview` first. It reports failed units, memory and filesystem
    pressure, and it is the cheapest way to rule out whole categories.
-2. Follow what it tells you. Failed unit → `read_service_status`, then
-   `read_tail_logs` for that unit. Disk pressure → `read_disk_usage`. Nothing
-   obvious → `read_open_ports` and `read_docker_ps`.
+2. Follow what it tells you. Failed unit -> `read_service_status`, then
+   `read_tail_logs` for that unit. Disk pressure -> `read_disk_usage`. Nothing
+   obvious -> `read_open_ports` and `read_docker_ps`.
 3. Read the configuration before concluding it is wrong. `read_read_config`
    shows what a service is actually set to do, which is often not what everyone
    assumes.
