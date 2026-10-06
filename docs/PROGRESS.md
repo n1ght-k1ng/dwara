@@ -114,6 +114,18 @@ advisories and the `@vitest/mocker` path traversal, with **all tests passing unc
 and no config edits**; `pnpm.overrides` pins esbuild and source-map-js, reached only
 through tsup.
 
+#### Phase 5 validation: 21/21
+
+Every scenario validated against the lab: reset, baseline confirmed, break applied,
+fault confirmed live, `check.sh` confirmed not-resolved, known-good repair applied,
+resolution confirmed. `pnpm eval:validate`, free, no model.
+
+The full pass reported 19 and two `RESET FAILED`; both were artifacts of editing
+`validate.sh` while it ran, and both passed on a clean re-run. `validate.sh` now
+retries a failed reset once, because recreating five privileged containers twenty
+times in a row occasionally loses a race, and a flaky reset reported as a scenario
+failure sends someone looking for a bug that is not there.
+
 #### Phase 6 exit criteria
 
 - [x] **No open high-severity findings.** Eight findings are recorded in

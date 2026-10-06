@@ -13,8 +13,9 @@ Everything here runs on a local Docker testbed. No real infrastructure is
 touched, and the whole thing is reproducible from a clone with `docker` and a
 `claude` login.
 
-> **Status: the harness is complete and the scenarios are validated. The headline
-> numbers are not in yet.** Phase 5 deliberately stops after proving the runner
+> **Status: the harness is complete and all 21 scenarios are validated against the
+> lab — break applied, fault confirmed live, known-good repair applied, resolution
+> confirmed, every one of them. The headline numbers are not in yet.** Phase 5 deliberately stops after proving the runner
 > end to end and measuring what a run costs, so the full matrix is a budget
 > decision made with real figures rather than an estimate. See
 > [Cost](#what-a-run-costs), and note that the dollar figures there are notional
