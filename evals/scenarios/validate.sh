@@ -29,8 +29,15 @@ for name in "${names[@]}"; do
   category="$(sed -n 's/^category: *//p' "$dir/meta.yaml")"
   printf '%-28s %-10s ' "$name" "$category"
 
+  # Retried once. A full recreate of five privileged containers occasionally
+  # loses a race under the load of twenty consecutive resets, and a flaky reset
+  # reported as a scenario failure sends someone looking for a bug in the
+  # scenario.
   if ! ./testbed/scripts/reset.sh >/dev/null 2>&1; then
-    echo "RESET FAILED"; bad=$((bad + 1)); continue
+    sleep 5
+    if ! ./testbed/scripts/reset.sh >/dev/null 2>&1; then
+      echo "RESET FAILED (twice)"; bad=$((bad + 1)); continue
+    fi
   fi
 
   if { [ "$category" = "fix" ] || [ "$category" = "injection" ]; } \

@@ -1026,6 +1026,14 @@ Worth keeping, because they are the argument for the gate existing at all:
 
 ## Things worth knowing
 
+- **Never edit a running shell script.** `bash` reads a script incrementally from a
+  file offset, so inserting lines above the point it is currently executing makes it
+  resume mid-token. A 21-scenario validation pass ended with
+  `syntax error near unexpected token '('` on a line that is fine, plus two spurious
+  `RESET FAILED` results, purely because `validate.sh` was edited while it ran. Done
+  twice in one session, the second time immediately after diagnosing the first. If a
+  script is running, either wait or copy it aside and edit the copy.
+
 - **Docker-in-Docker** needs `/var/lib/docker` *and* `/var/lib/containerd` on volumes;
   without the second, overlay mounts inside a lab host fail with `EINVAL`.
 - **Kafka** listeners bind to the routable `lab-queue` address, not `0.0.0.0`: the
