@@ -4,7 +4,101 @@ Handoff notes between Claude Code sessions. Update after every task.
 
 ## Current phase
 
-Phase 5 — benchmark and eval harness. **In progress.** Phases 0 through 4 complete;
+Phase 6 — security hardening and threat model. **In progress.** Phase 5's harness and
+scenarios are done; its second exit criterion (two-model results) is deliberately not
+met and is blocked on design as well as budget — see the Phase 5 log.
+
+### Phase 6 log
+
+**Task 1 — the threat model (2026-10-06).** `docs(security)`.
+
+`docs/THREAT_MODEL.md` had one question answered and nothing about what is being
+protected. Now carries the asset list, the four trust boundaries, and five attacker
+models: injected server content, a compromised agent, a malicious policy change, a
+local attacker, and the hosts themselves. Rows resting on reasoning rather than
+evidence are marked *argued* rather than dressed up as pinned.
+
+Three things are **conceded rather than defended**, because claiming otherwise would be
+the more dangerous document: a local attacker who can write `.dwara/` has already won;
+injection resistance is a property of the model, not of this code; and an operator who
+approves a bad policy diff is not stopped by anything.
+
+**Task 2 — input fuzzing (2026-10-06).** `feat(tools)`.
+
+`packages/tools/src/fuzz.test.ts`. `escape.test.ts` already proves `quoteArgv` survives
+arbitrary bytes, which is necessary and not sufficient — escaping only helps if the
+value reaches it as **one argv element**. So the properties are about the shape of what
+a tool builds: argv element count independent of content, **a value landing in the same
+argv slots whatever it contains**, no shell command ever constructed, and no accepted
+path naming a denied file across six spellings.
+
+The slot property had to be restated. The first version asked how many arguments
+*contained* the payload, and fast-check immediately produced `"c"` — which is in
+`systemctl` and half the flags besides. Coincidental substrings say nothing; which
+slots changed says everything.
+
+**It found a vulnerability I had introduced that morning.** `disk_usage` had no path
+guard at all, so it accepted `/etc/shadow`, `/root/.ssh/id_ed25519` and `**/.env`.
+Before the `du -a` change the tool listed directories, so `disk_usage /root` leaked a
+size; after it, `du` lists **file names**, so the tool would enumerate the contents of
+exactly the directories the deny-list exists to protect. Fixed with a deny-list guard —
+no allow-list, because walking from `/` is the point of the tool.
+
+The lesson is the one this project keeps relearning: **widening what a read tool returns
+widens what it can leak**, and the change that did it looked like a one-flag fix.
+
+**Task 3 — red team on the redactor (2026-10-06).** `fix(core)`.
+
+One leak, in the shape a real config file uses: a **YAML block scalar**.
+`password: |` with the value on the following indented line was returned in full. The
+general assignment rule reaches across a newline, but the `|` indicator sits between
+key and value and stops it; entropy analysis is gated on context appearing on the
+**same line**, and the value's line is just an indented token. Fixed for `|`, `>`, and
+the strip and explicit-indent forms.
+
+`redact/redteam.test.ts` keeps all 39 cases, including the gaps asserted *as* gaps.
+Two gaps stay deliberately — a high-entropy token on a line with no secret-like word,
+and a long token of only two character classes — because closing either redacts every
+image digest and container id, and a redactor nobody can read through gets turned off.
+
+**Two things I first wrote up as gaps were not gaps.** A value under twenty characters,
+and a value split from its key by a newline, are both caught by rules I had not
+accounted for when reading the code. Removed rather than left in as limitations that
+sound thoughtful and are false.
+
+**Tasks 4 and 5 — dedicated key, SECURITY.md, dependency audit (2026-10-06).**
+`feat(security)`.
+
+`docs/DEDICATED_KEY.md`: a Dwara-only key outside `~/.ssh`, `IdentitiesOnly yes`,
+`restrict,pty` in `authorized_keys`, and a sudoers file granting verbs. The step worth
+having written down is the verification, because the interesting test is not whether
+Dwara can connect:
+
+```bash
+ssh -F ~/.dwara/ssh_config prod-web true   # succeeds
+ssh prod-web true                          # must FAIL
+```
+
+If the second succeeds the setup is decorative. It also explains how to read an
+allow-list as a whole, with the two traps this repo's own review found: `tee` into a
+unit directory plus `systemctl start *` is full root, and a trailing wildcard on `find`
+permits `find /var/log -exec rm -rf / {} +`.
+
+`SECURITY.md`: private disclosure, response times, and an explicit **out of scope**
+list so a report is not wasted — each entry saying what the in-scope version of the
+same report would be.
+
+**The dependency audit is clean, including dev dependencies.** It started at 6
+advisories, 2 critical. All were in the test and build toolchain and `pnpm audit --prod`
+was already clean, but "only dev dependencies" is a bad habit in a repo whose job is
+security. vitest 3.x → 4.1.11 cleared the two critical tinypool prototype-pollution
+advisories and the `@vitest/mocker` path traversal, with **all tests passing unchanged
+and no config edits**; `pnpm.overrides` pins esbuild and source-map-js, reached only
+through tsup.
+
+### Phase 5 — where it ended up
+
+Phase 5 — benchmark and eval harness. **Complete except by design.** Phases 0 through 4 complete;
 Phase 4's three exit criteria met on 2026-10-05.
 
 Budget for this phase is **build-and-validate only**: the runner, three scenarios end to
