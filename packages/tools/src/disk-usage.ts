@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { Risk, type BuiltToolDef } from '@dwara/core';
+import {
+  DwaraError,
+  Risk,
+  lexicalPathProblem,
+  normalisePath,
+  type BuiltToolDef,
+} from '@dwara/core';
+import { resolvedPathIsDenied } from './paths.js';
 import {
   READ_TIMEOUT_MS,
   at,
@@ -66,6 +73,44 @@ export interface DiskUsage {
  * Byte counts throughout, via `df -B1` and `du -B1`, because human-readable
  * units ("1.2G") are a parsing hazard and cannot be compared arithmetically.
  */
+/**
+ * Refuses a path whose *contents* must not be enumerated.
+ *
+ * There is no allow-list here, deliberately: the whole point of this tool is to
+ * walk wherever the space went, starting at `/`. What it may not do is name the
+ * files inside somewhere on the deny-list.
+ *
+ * This guard was missing, and the input fuzzer found it. It mattered more after
+ * `-a` was added to the `du`: before that the tool listed directories, so
+ * `disk_usage` on `/root` revealed a size; afterwards it listed **file names**,
+ * which is exactly what the deny-list covers /root and every .ssh directory for.
+ * A tool that only reports sizes still leaks the names.
+ *
+ * @throws DwaraError `UNSAFE_ARGUMENT`
+ */
+function guardUsagePath(requested: string): string {
+  const problem = lexicalPathProblem(requested);
+  if (problem !== undefined) {
+    throw new DwaraError('UNSAFE_ARGUMENT', `cannot measure that path: ${problem}`, {
+      details: { path: requested },
+    });
+  }
+
+  const path = normalisePath(requested.trim());
+  if (resolvedPathIsDenied(path)) {
+    throw new DwaraError(
+      'UNSAFE_ARGUMENT',
+      `Dwara will not enumerate ${path}; it is on the deny-list`,
+      {
+        details: { path },
+        hint: 'measure the directory above it instead — the total is reported without naming what is inside',
+      },
+    );
+  }
+
+  return path;
+}
+
 export const diskUsage: BuiltToolDef<Input, DiskUsage> = {
   name: 'disk_usage',
   risk: Risk.Read,
@@ -92,8 +137,9 @@ export const diskUsage: BuiltToolDef<Input, DiskUsage> = {
   input,
 
   build: (params) => {
+    const path = guardUsagePath(params.path);
     const commands = [
-      { argv: ['df', '-P', '-B1', '--', params.path], timeoutMs: READ_TIMEOUT_MS },
+      { argv: ['df', '-P', '-B1', '--', path], timeoutMs: READ_TIMEOUT_MS },
       // -d1 keeps this to one level: a recursive du on / is slow enough to hit
       // the timeout on a real host and returns far more than anyone can read.
       //
@@ -104,7 +150,7 @@ export const diskUsage: BuiltToolDef<Input, DiskUsage> = {
       // agent diagnosed a full /var/log, narrowed it to /var/log/lab-api, had no
       // way to see the file inside, and correctly declined to truncate a guess.
       {
-        argv: ['du', '-B1', '-d1', '-a', '--', params.path],
+        argv: ['du', '-B1', '-d1', '-a', '--', path],
         sudo: true,
         timeoutMs: READ_TIMEOUT_MS,
       },
