@@ -2,6 +2,10 @@
 # with its own heavy dependency tree, built only inside Docker.
 packages:
   - 'packages/*'
+  # The benchmark runner is a workspace package so it is typed, linted and
+  # tested like everything else. The Phase 3 gate's harness was bash in a
+  # scratchpad, and it silently scored a correct refusal as a failure.
+  - 'evals/runner'
 
 # esbuild ships a platform binary that its install script places; tsup needs it.
 onlyBuiltDependencies:

@@ -16,6 +16,7 @@ const workspaceAliases = {
   '@dwara/mcp-server': pkg('mcp-server'),
   '@dwara/cli': pkg('cli'),
   '@dwara/hook': pkg('hook'),
+  '@dwara/eval-runner': fileURLToPath(new URL('./evals/runner/src/index.ts', import.meta.url)),
 };
 
 export default defineConfig({
@@ -50,7 +51,7 @@ export default defineConfig({
         resolve: { alias: workspaceAliases },
         test: {
           name: 'unit',
-          include: ['packages/*/src/**/*.test.ts'],
+          include: ['packages/*/src/**/*.test.ts', 'evals/runner/src/**/*.test.ts'],
           environment: 'node',
         },
       },

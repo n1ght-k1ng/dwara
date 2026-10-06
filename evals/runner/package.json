@@ -1,0 +1,36 @@
+{
+  "name": "@dwara/eval-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless benchmark runner for the Dwara scenarios",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "bin": {
+    "dwara-eval": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@dwara/cli": "workspace:*",
+    "@dwara/core": "workspace:*",
+    "commander": "^14.0.3",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  }
+}

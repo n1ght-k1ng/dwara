@@ -25,8 +25,9 @@ export default tseslint.config(
     },
   },
   {
-    // The CLI and the hook binary talk to the user over stdio.
-    files: ['packages/cli/**/*.ts', 'packages/hook/**/*.ts'],
+    // The CLI, the hook binary and the benchmark runner talk to the user over
+    // stdio.
+    files: ['packages/cli/**/*.ts', 'packages/hook/**/*.ts', 'evals/runner/**/*.ts'],
     rules: { 'no-console': 'off' },
   },
   prettier,

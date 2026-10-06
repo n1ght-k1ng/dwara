@@ -19,8 +19,9 @@
       "@dwara/tools": ["./packages/tools/src/index.ts"],
       "@dwara/mcp-server": ["./packages/mcp-server/src/index.ts"],
       "@dwara/cli": ["./packages/cli/src/index.ts"],
-      "@dwara/hook": ["./packages/hook/src/index.ts"]
+      "@dwara/hook": ["./packages/hook/src/index.ts"],
+      "@dwara/eval-runner": ["./evals/runner/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts", "test/**/*.ts", "*.ts"]
+  "include": ["packages/*/src/**/*.ts", "evals/runner/src/**/*.ts", "test/**/*.ts", "*.ts"]
 }

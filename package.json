@@ -10,8 +10,8 @@
   },
   "packageManager": "pnpm@10.21.0",
   "scripts": {
-    "build": "pnpm -r --filter \"./packages/**\" run build",
-    "clean": "pnpm -r --filter \"./packages/**\" run clean",
+    "build": "pnpm -r --filter \"./packages/**\" --filter \"./evals/**\" run build",
+    "clean": "pnpm -r --filter \"./packages/**\" --filter \"./evals/**\" run clean",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -26,7 +26,9 @@
     "testbed:status": "./testbed/scripts/status.sh",
     "testbed:break": "./testbed/scripts/break.sh",
     "test:coverage": "vitest run --project unit --coverage",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "eval": "node evals/runner/dist/index.js",
+    "eval:validate": "./evals/scenarios/validate.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",
