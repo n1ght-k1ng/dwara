@@ -114,6 +114,26 @@ advisories and the `@vitest/mocker` path traversal, with **all tests passing unc
 and no config edits**; `pnpm.overrides` pins esbuild and source-map-js, reached only
 through tsup.
 
+#### Phase 6 exit criteria
+
+- [x] **No open high-severity findings.** Eight findings are recorded in
+  `docs/THREAT_MODEL.md` with severity, how each was found, and the test that holds
+  it. Three were high and all three are fixed. The one open item (finding 6, the
+  sudoers composition that amounts to root) is a design decision about a capability
+  that is currently inert.
+- [x] **Threat model published with honest limitations.** Including three things
+  conceded rather than defended, and two cases removed after measurement showed they
+  were not the gaps they looked like.
+- [x] **Dedicated-key setup documented and tested.** `docs/DEDICATED_KEY.md` plus
+  `test/integration/dedicated-key.test.ts`, whose load-bearing assertion is the
+  negative one: a plain `ssh lab-api` must fail.
+
+Still true of Phase 6 and worth saying: the adversarial passes covered the redactor
+and tool inputs, which were the gaps. Policy, approvals, the hook and the transport
+already had adversarial coverage from earlier phases, and that was **verified rather
+than assumed** — including the claim that `destructive` cannot be enabled by any
+policy, which `evaluate.test.ts` holds under "F · destructive is a floor in code".
+
 ### Phase 5 — where it ended up
 
 Phase 5 — benchmark and eval harness. **Complete except by design.** Phases 0 through 4 complete;
