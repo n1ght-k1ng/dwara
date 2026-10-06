@@ -184,6 +184,29 @@ export interface ToolDef<I, O> {
   readonly name: string;
   readonly description: string;
   readonly risk: Risk;
+  /**
+   * The risk this *particular call* actually carries, when it is lower than the
+   * tool's declared class.
+   *
+   * Exists for one honest case: `edit_config` in `mode: "plan"` writes nothing.
+   * It reads the file, computes the result in this process and hands back a
+   * preview and a plan hash. Judging it as a `config` action meant a human had to
+   * approve a dry run before they could see what they were being asked to approve,
+   * and then approve the change itself — two round trips per edit, which a
+   * benchmark run measured as three approvals and three turns for a one-line fix.
+   * DESIGN §3.4 says the approval-required response *is* the plan, and this is
+   * what makes that true.
+   *
+   * It can only ever lower the class for policy purposes, and it cannot be used to
+   * escape anything: `tools.never`, tool overrides and the destructive deny are all
+   * keyed on the tool name or checked before the risk class, so they still apply.
+   * The pipeline also uses it to decide whether to snapshot, because a call that
+   * changes nothing has nothing to back up.
+   *
+   * A tool may not use this to claim a *higher* class; the pipeline takes the
+   * stricter of the two, so a mistake here fails closed.
+   */
+  effectiveRisk?(input: I): Risk;
   /** Always includes `host`. */
   readonly input: z.ZodType<I>;
   /**

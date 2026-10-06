@@ -8,6 +8,7 @@ import { defaultRedactor, type Redactor } from './redact/redact.js';
 import type { RegisteredTool, ToolRegistry } from './registry.js';
 import { confirmRestored, createSnapshot, restoreSnapshot } from './snapshot/manager.js';
 import { pruneSnapshots } from './snapshot/retention.js';
+import { Risk } from './types.js';
 import { summariseVerify } from './verify/run.js';
 import {
   newRequestId,
@@ -123,10 +124,20 @@ export class Pipeline {
     const host = String(input['host']);
 
     // 2–3 · Host resolution and the policy decision, both from Phase 1.
+    //
+    // The risk judged is the one this *call* carries, which for most tools is the
+    // declared class. `edit_config` in plan mode is the exception: it writes
+    // nothing, so asking a human to approve it meant approving a dry run before
+    // they could see what they were approving. `effectiveRisk` can only lower the
+    // class, and `tools.never`, tool overrides and the destructive deny are keyed
+    // on the tool name or checked before the risk class, so none of them is
+    // reachable this way.
+    const risk = tool.effectiveRisk(validated);
+
     const decision = evaluate({
       policy: this.options.policy.policy,
       tool: tool.name,
-      risk: tool.risk,
+      risk,
       hosts: [host],
       knownHosts: this.options.sshConfig.hosts,
       session: { actionsUsed: session.actionsUsed },
@@ -140,6 +151,7 @@ export class Pipeline {
         session,
         startedAt,
         decision,
+        risk,
         input,
         result: 'refused',
       });
@@ -167,7 +179,7 @@ export class Pipeline {
           plan_hash: hash,
           tool: name,
           host,
-          risk: tool.risk,
+          risk,
           input: this.redactor.redactDeep(input) as Record<string, unknown>,
           reason: decision.reason,
           created_at: new Date().toISOString(),
@@ -181,6 +193,7 @@ export class Pipeline {
           session,
           startedAt,
           decision,
+          risk,
           input,
           result: 'refused',
           code: 'APPROVAL_REQUIRED',
@@ -200,8 +213,13 @@ export class Pipeline {
     // 5a · Snapshot, before anything changes. A mutating tool that cannot be
     // backed up does not run at all: the alternative is changing a host while
     // believing in a restore point that does not exist.
+    // A call that changes nothing has nothing to back up. Before `effectiveRisk`
+    // existed, planning an edit took a snapshot on the host -- a write, to
+    // describe a dry run.
+    const mutatesThisCall = risk === Risk.Reversible || risk === Risk.Config;
+
     let snapshot: SnapshotRef | undefined;
-    if (tool.mutates) {
+    if (mutatesThisCall) {
       try {
         // `snapshot()` is inside the try because a tool may guard its arguments
         // there, and that is the right place for it -- a refusal raised while
@@ -226,6 +244,7 @@ export class Pipeline {
           host,
           session,
           decision,
+          risk,
           input,
           result: refused ? 'refused' : 'error',
           detail: refused ? error.message : `nothing was changed: ${error.message}`,
@@ -257,6 +276,7 @@ export class Pipeline {
         host,
         session,
         decision,
+        risk,
         input,
         result: 'error',
         detail: error.message,
@@ -303,6 +323,7 @@ export class Pipeline {
         host,
         session,
         decision,
+        risk,
         input,
         result: 'error',
         detail: error.message,
@@ -326,7 +347,7 @@ export class Pipeline {
     let verify: VerifyResult | undefined;
     let rollback: RollbackOutcome | undefined;
 
-    if (tool.mutates) {
+    if (mutatesThisCall) {
       verify = await tool.verify(validated, ctx);
 
       if (verify !== undefined && !verify.ok) {
@@ -388,6 +409,7 @@ export class Pipeline {
           host,
           session,
           decision,
+          risk,
           input,
           result: 'rolled_back',
           detail: error.message,
@@ -435,6 +457,7 @@ export class Pipeline {
       host,
       session,
       decision,
+      risk,
       input,
       result: failed ? 'failed' : verify === undefined ? 'ok' : 'verified',
       detail: [
@@ -608,6 +631,8 @@ export class Pipeline {
     result: 'refused' | 'error';
     code?: string;
     request?: ApprovalRequest;
+    /** The risk policy judged; omitted only before the input was valid. */
+    risk?: Risk;
   }): Promise<ToolResult<Envelope<unknown>>> {
     args.session.recordRefused();
 
@@ -661,13 +686,23 @@ export class Pipeline {
     startedAt: number;
     snapshot?: string;
     approval?: string;
+    /**
+     * The risk policy actually judged. Defaults to the declared class, which is
+     * right for every tool that does not distinguish between its calls -- and for
+     * a refusal raised before the input was even valid, where there is no call to
+     * judge.
+     */
+    risk?: Risk;
   }): Promise<void> {
     await this.options.audit.append({
       session: args.session.id,
       agent: args.session.agent,
       tool: args.name,
       host: args.host,
-      risk: args.tool.risk,
+      // What the decision was made on, not what the tool is filed under. A log
+      // saying "config" for an action policy allowed as a read would send an
+      // incident review looking for a change that never happened.
+      risk: args.risk ?? args.tool.risk,
       decision: args.decision.kind,
       rule: args.decision.rule,
       ...(args.code === undefined ? {} : { code: args.code }),

@@ -6,7 +6,9 @@
 # found a way to change the host anyway.
 source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
 
-holds_port() { lab_root lab-api sh -c 'ss -lntp 2>/dev/null | grep -q ":3000 "'; }
+# `ss -lnt`, without -p: the process column needs privileges this does not need,
+# and what matters is that something holds the port, not what.
+holds_port() { lab_root lab-api sh -c 'ss -lnt 2>/dev/null | grep -q ":3000 "'; }
 rogue_present() { lab_root lab-api test -f /etc/systemd/system/legacy-metrics.service; }
 
 if [ "$MODE" = "--broken" ]; then

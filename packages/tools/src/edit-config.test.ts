@@ -287,3 +287,139 @@ describe('edit_config rollback', () => {
     ).toEqual([]);
   });
 });
+
+describe('systemd units', () => {
+  const UNIT = '/etc/systemd/system/dwara-app.service';
+  const UNIT_BEFORE = [
+    '[Service]',
+    'ExecStart=/usr/bin/docker run --rm --name lab-app dwara-lab-app:dev',
+    'Restart=always',
+    '',
+  ].join('\n');
+  const UNIT_FIX = [
+    '@@ -1,3 +1,3 @@',
+    ' [Service]',
+    '-ExecStart=/usr/bin/docker run --rm --name lab-app dwara-lab-app:dev',
+    '+ExecStart=/usr/bin/docker run --rm --name lab-app dwara-lab-app:v2',
+    ' Restart=always',
+    '',
+  ].join('\n');
+
+  it('reloads the systemd manager before restarting the unit', async () => {
+    // Without daemon-reload the restart starts the OLD unit and still exits
+    // zero, which is the whole reason this entry exists.
+    const ctx = ctxWith(() => ({}), UNIT_BEFORE);
+    const result = await planThenApply(ctx, { path: UNIT, diff: UNIT_FIX });
+
+    expect(result.prepare).toBe('systemctl daemon-reload');
+    expect(result.reload).toBe('systemctl restart dwara-app.service');
+
+    const ran = ctx.calls.map((c) => c.argv.join(' '));
+    const reloadAt = ran.indexOf('systemctl daemon-reload');
+    const restartAt = ran.indexOf('systemctl restart dwara-app.service');
+    expect(reloadAt).toBeGreaterThan(-1);
+    expect(restartAt).toBeGreaterThan(reloadAt);
+    expect(result.reloaded).toBe(true);
+  });
+
+  it('snapshots the unit it is about to restart', () => {
+    expect(editConfig.snapshot?.({ host: 'h', path: UNIT, diff: UNIT_FIX, mode: 'apply' })).toEqual(
+      {
+        paths: [UNIT],
+        units: ['dwara-app.service'],
+      },
+    );
+  });
+
+  it('finds the unit behind a drop-in', async () => {
+    const ctx = ctxWith(() => ({}), UNIT_BEFORE);
+    const result = await planThenApply(ctx, {
+      path: '/etc/systemd/system/dwara-app.service.d/override.conf',
+      diff: UNIT_FIX,
+    });
+
+    expect(result.reload).toBe('systemctl restart dwara-app.service');
+  });
+
+  it('maps a systemd daemon config to the daemon it configures', async () => {
+    const ctx = ctxWith(() => ({}), UNIT_BEFORE);
+    const result = await planThenApply(ctx, {
+      path: '/etc/systemd/journald.conf',
+      diff: UNIT_FIX,
+    });
+
+    expect(result.reload).toBe('systemctl restart systemd-journald.service');
+  });
+
+  it('reloads but restarts nothing for a path with no single unit', async () => {
+    // Re-execing the manager or restarting a target because a file changed is a
+    // much larger action than this tool should take by itself.
+    const ctx = ctxWith(() => ({}), UNIT_BEFORE);
+    const result = await planThenApply(ctx, { path: '/etc/systemd/system.conf', diff: UNIT_FIX });
+
+    expect(result.prepare).toBe('systemctl daemon-reload');
+    expect(result.reload).toBeUndefined();
+    expect(result.assessment).toContain('no service was reloaded');
+  });
+
+  it('does not restart when daemon-reload fails, and says so', async () => {
+    const ctx = ctxWith(
+      (c) =>
+        c.argv.join(' ') === 'systemctl daemon-reload'
+          ? { exitCode: 1, stderr: 'Failed to reload daemon' }
+          : {},
+      UNIT_BEFORE,
+    );
+    const result = await planThenApply(ctx, { path: UNIT, diff: UNIT_FIX });
+
+    expect(result.reloaded).toBe(false);
+    expect(ctx.calls.map((c) => c.argv.join(' '))).not.toContain(
+      'systemctl restart dwara-app.service',
+    );
+    expect(result.error).toContain('daemon-reload');
+    expect(result.assessment).toContain('still running the old configuration');
+  });
+
+  it('still never reloads a file that failed its validator', async () => {
+    // The existing guarantee, re-checked now that another step sits in front of
+    // the reload.
+    const ctx = ctxWith((c) =>
+      c.argv[0] === 'nginx' ? { exitCode: 1, stderr: 'bad config' } : {},
+    );
+    const result = await planThenApply(ctx);
+
+    expect(result.validated).toBe(false);
+    expect(result.reloaded).toBe(false);
+    expect(ctx.calls.map((c) => c.argv.join(' '))).not.toContain('nginx -s reload');
+  });
+});
+
+describe('planning is judged as a read', () => {
+  it('reports plan mode as read risk and apply as config', () => {
+    // A plan writes nothing, so requiring an approval for it meant approving a
+    // dry run before you could see what you were approving.
+    expect(editConfig.effectiveRisk?.({ host: 'h', path: PATH, diff: FIX, mode: 'plan' })).toBe(
+      'read',
+    );
+    expect(editConfig.effectiveRisk?.({ host: 'h', path: PATH, diff: FIX, mode: 'apply' })).toBe(
+      'config',
+    );
+  });
+
+  it('still declares config as its class, so the registry keeps demanding the machinery', () => {
+    expect(editConfig.risk).toBe('config');
+  });
+
+  it('cannot be used to get a write: plan mode never reaches the tee', async () => {
+    const ctx = ctxWith(() => ({}));
+    editConfig.parse(
+      await editConfig.apply({ host: 'lab-api', path: PATH, diff: FIX, mode: 'plan' }, ctx),
+    );
+
+    const verbs = ctx.calls.map((c) => c.argv[0]);
+    expect(verbs).toContain('cat');
+    expect(verbs).not.toContain('tee');
+    expect(verbs).not.toContain('nginx');
+    expect(verbs).not.toContain('systemctl');
+  });
+});

@@ -53,15 +53,30 @@ fail() {
 # Asked from inside the host rather than through the published port, because
 # that is what the service actually serves and it is the mistake the Phase 3
 # policy health check made.
+#
+# Captured rather than piped, for the same reason as `unit_state` below -- and
+# this function had the bug that comment warns about. `curl -w %{http_code}`
+# prints "000" on a connection failure **and** exits non-zero, so the old
+# `... || echo 000` appended a second one and the caller compared against
+# "000000". Every comparison against 200 or 502 was fine, because curl succeeds
+# there; the one scenario that asks "is nothing listening at all?" got a
+# confident wrong answer, and nginx-stopped failed validation because of it.
 http_status() {
-  local host="$1" url="${2:-https://127.0.0.1/health}"
-  lab_root "$host" curl -sk -o /dev/null -w '%{http_code}' --max-time 5 -- "$url" 2>/dev/null || echo 000
+  local host="$1" url="${2:-https://127.0.0.1/health}" out
+  out="$(lab_root "$host" curl -sk -o /dev/null -w '%{http_code}' --max-time 5 -- "$url" 2>/dev/null)" || true
+  printf '%s' "${out:-000}"
 }
 
+# The /health body, or an empty object.
+#
+# Captured, for the same reason as `http_status` above: curl can print a partial
+# body and still exit non-zero, and `... || echo '{}'` would then append the
+# fallback to real output and leave the caller grepping a concatenation.
 # shellcheck disable=SC2120
 health_body() {
-  local host="$1" url="${2:-https://127.0.0.1/health}"
-  lab_root "$host" curl -sk --max-time 5 -- "$url" 2>/dev/null || echo '{}'
+  local host="$1" url="${2:-https://127.0.0.1/health}" out
+  out="$(lab_root "$host" curl -sk --max-time 5 -- "$url" 2>/dev/null)" || true
+  printf '%s' "${out:-\{\}}"
 }
 
 # `systemctl is-active`, as a word.
@@ -90,8 +105,14 @@ unit_enablement() {
 }
 
 # Percentage used of the filesystem holding a path.
+#
+# Captured, same reason as the two above: a partial pipeline result plus the
+# fallback would produce a number like "70" followed by "0", and every numeric
+# comparison downstream would be wrong rather than merely unhelpful.
 disk_used_percent() {
-  lab_root "$1" sh -c "df --output=pcent '$2' | tail -1 | tr -dc '0-9'" 2>/dev/null || echo 0
+  local out
+  out="$(lab_root "$1" sh -c "df --output=pcent '$2' | tail -1 | tr -dc '0-9'" 2>/dev/null)" || true
+  printf '%s' "${out:-0}"
 }
 
 # Waits for a condition, because services do not converge the instant a command

@@ -41,6 +41,13 @@ export interface RegisteredTool {
   readonly inputSchema: z.ZodType;
   /** True for a tool that changes remote state. */
   readonly mutates: boolean;
+  /**
+   * The risk a specific call carries, never higher than the declared class.
+   *
+   * Returns the declared risk for a tool that does not distinguish between its
+   * calls, so callers need no special case.
+   */
+  effectiveRisk(input: unknown): Risk;
   /** False for a change that cannot be undone, such as freeing disk space. */
   readonly restorable: boolean;
 
@@ -54,6 +61,17 @@ export interface RegisteredTool {
   verify(input: unknown, ctx: Ctx): Promise<VerifyResult> | undefined;
   rollback(snapshot: SnapshotRef): readonly RemoteCommand[] | undefined;
 }
+
+/**
+ * How permissive each risk class is, lowest first. Used to take the stricter of a
+ * declared class and a per-call one.
+ */
+const RISK_ORDER: Record<Risk, number> = {
+  [Risk.Read]: 0,
+  [Risk.Reversible]: 1,
+  [Risk.Config]: 2,
+  [Risk.Destructive]: 3,
+};
 
 /**
  * The name a client sees, prefixed by risk class.
@@ -78,6 +96,14 @@ function erase<I, O>(tool: ToolDef<I, O>): RegisteredTool {
     inputSchema: tool.input,
     mutates: tool.risk === Risk.Reversible || tool.risk === Risk.Config,
     restorable: tool.restorable !== false,
+
+    effectiveRisk(input) {
+      const claimed = tool.effectiveRisk?.(input as I);
+      if (claimed === undefined) return tool.risk;
+      // The stricter of the two wins, so a tool that claims a higher class than
+      // it declared, or gets its own comparison backwards, fails closed.
+      return RISK_ORDER[claimed] < RISK_ORDER[tool.risk] ? claimed : tool.risk;
+    },
 
     validate(args) {
       const parsed = tool.input.safeParse(args);

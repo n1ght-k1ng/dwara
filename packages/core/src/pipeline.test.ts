@@ -1119,3 +1119,123 @@ describe('ToolRegistry', () => {
     expect(registry.get('nothing')).toBeUndefined();
   });
 });
+
+describe('Pipeline effectiveRisk', () => {
+  /** A config tool that writes only when asked to, like edit_config. */
+  type StagedWrite = ToolDef<{ host: string; mode: 'plan' | 'apply' }, { mode: string }>;
+
+  const twoModeTool: StagedWrite = {
+    name: 'two_mode',
+    description: 'Config tool whose plan mode writes nothing.',
+    risk: Risk.Config,
+    input: z.object({ host: z.string(), mode: z.enum(['plan', 'apply']) }).strict(),
+    effectiveRisk: (input) => (input.mode === 'plan' ? Risk.Read : Risk.Config),
+    build: (input) => [{ argv: ['echo', input.mode], timeoutMs: 1000 }],
+    parse: (raws) => ({ mode: raws.map((r) => r.stdout.trim()).join('') }),
+    snapshot: () => ({ paths: ['/etc/example.conf'] }),
+    verify: () => Promise.resolve({ ok: true, checks: [], durationMs: 0 }),
+    rollback: () => [],
+  };
+
+  function pipelineWith(tool: ToolDef<never, never>): Pipeline {
+    const registry = new ToolRegistry();
+    registry.register(tool as never);
+    return new Pipeline({
+      policy: parsePolicy(POLICY),
+      sshConfig: SSH_CONFIG,
+      runner: fakeRunner([raw({ stdout: 'plan\n' })]),
+      registry,
+      audit,
+    });
+  }
+
+  it('allows a plan without approval, because it writes nothing', async () => {
+    const result = await pipelineWith(twoModeTool as never).execute(
+      'config_two_mode',
+      { host: 'lab-api', mode: 'plan' },
+      new Session(),
+    );
+
+    expect(result.decision.kind).toBe('allow');
+    expect(result.ok).toBe(true);
+  });
+
+  it('still requires approval to apply', async () => {
+    const result = await pipelineWith(twoModeTool as never).execute(
+      'config_two_mode',
+      { host: 'lab-api', mode: 'apply' },
+      new Session(),
+    );
+
+    expect(result.decision.kind).toBe('approval');
+    expect(result.ok).toBe(false);
+  });
+
+  it('takes no snapshot for a call that changes nothing', async () => {
+    // Planning an edit used to leave a root-owned copy of the file on the host:
+    // a write, to describe a dry run.
+    const runner = fakeRunner([raw({ stdout: 'plan\n' })]);
+    const registry = new ToolRegistry();
+    registry.register(twoModeTool as never);
+    const pipeline = new Pipeline({
+      policy: parsePolicy(POLICY),
+      sshConfig: SSH_CONFIG,
+      runner,
+      registry,
+      audit,
+    });
+
+    await pipeline.execute('config_two_mode', { host: 'lab-api', mode: 'plan' }, new Session());
+
+    expect(runner.calls.map((c) => c.argv[0])).not.toContain('mkdir');
+    expect(runner.calls.map((c) => c.argv[0])).not.toContain('cp');
+  });
+
+  it('records the risk policy actually judged', async () => {
+    await pipelineWith(twoModeTool as never).execute(
+      'config_two_mode',
+      { host: 'lab-api', mode: 'plan' },
+      new Session(),
+    );
+
+    const entries = await audit.read();
+    expect(entries.at(-1)?.risk).toBe('read');
+    // The tool is still named for its declared class, so nothing about the
+    // client-facing name or the permission prefix moves.
+    expect(entries.at(-1)?.tool).toBe('config_two_mode');
+  });
+
+  it('fails closed when a tool claims a HIGHER class than it declared', async () => {
+    // The stricter of the two wins, so a tool that gets its own comparison
+    // backwards cannot quietly escalate past the registry's requirements.
+    const liar: StagedWrite = {
+      ...twoModeTool,
+      name: 'liar',
+      risk: Risk.Read,
+      effectiveRisk: () => Risk.Destructive,
+      snapshot: undefined,
+      verify: undefined,
+      rollback: undefined,
+    };
+
+    const result = await pipelineWith(liar as never).execute(
+      'read_liar',
+      { host: 'lab-api', mode: 'plan' },
+      new Session(),
+    );
+
+    expect(result.decision.kind).toBe('allow');
+    const entries = await audit.read();
+    expect(entries.at(-1)?.risk).toBe('read');
+  });
+
+  it('leaves a tool without effectiveRisk judged by its declared class', async () => {
+    const result = await pipelineWith(echoTool as never).execute(
+      'read_echo_unit',
+      { host: 'lab-api', unit: 'nginx' },
+      new Session(),
+    );
+
+    expect(result.decision.kind).toBe('allow');
+  });
+});

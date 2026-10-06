@@ -77,6 +77,8 @@ export interface EditConfigResult {
   readonly changes: { readonly added: number; readonly removed: number; readonly hunks: number };
   /** The command that will check the result, if this file type has one. */
   readonly validator?: string;
+  /** Run before `reload`, e.g. `systemctl daemon-reload`. */
+  readonly prepare?: string;
   /** How the change is made to take effect, if at all. */
   readonly reload?: string;
   /** Present on plan: what the file will contain. Redacted like any output. */
@@ -107,7 +109,52 @@ interface FileKind {
   readonly match: RegExp;
   readonly unit?: string;
   readonly validator?: RemoteCommand;
+  /**
+   * Run before `reload`. Exists for systemd, where a unit file on disk means
+   * nothing until `daemon-reload` has been run -- without it the restart that
+   * follows succeeds while the service keeps running the *old* unit, which is
+   * the difference between "the command exited zero" and "the change worked".
+   */
+  readonly prepare?: RemoteCommand;
   readonly reload?: RemoteCommand;
+  /**
+   * For files whose unit and reload depend on the path. A unit file names its own
+   * service, so it cannot be a constant in the table below.
+   */
+  readonly derive?: (path: string) => {
+    unit?: string;
+    prepare?: RemoteCommand;
+    reload?: RemoteCommand;
+  };
+}
+
+/**
+ * The unit a path under /etc/systemd belongs to, when there is one.
+ *
+ * `/etc/systemd/system/foo.service`            -> foo.service
+ * `/etc/systemd/system/foo.service.d/override.conf` -> foo.service (a drop-in)
+ * `/etc/systemd/journald.conf`                 -> systemd-journald.service
+ *
+ * Anything else -- `system.conf`, a target's `.wants` directory -- yields no
+ * unit, and the edit then gets `daemon-reload` and nothing restarted. Restarting
+ * a target or re-execing the manager because someone edited a file is a much
+ * larger action than this tool should take on its own.
+ */
+function systemdUnitFor(path: string): string | undefined {
+  const dropIn =
+    /^\/etc\/systemd\/system\/([A-Za-z0-9@._-]+\.(?:service|socket|timer|path|mount))\.d\//.exec(
+      path,
+    );
+  if (dropIn?.[1] !== undefined) return dropIn[1];
+
+  const unit =
+    /^\/etc\/systemd\/system\/([A-Za-z0-9@._-]+\.(?:service|socket|timer|path|mount))$/.exec(path);
+  if (unit?.[1] !== undefined) return unit[1];
+
+  const daemonConf = /^\/etc\/systemd\/(journald|resolved|logind|timesyncd)\.conf$/.exec(path);
+  if (daemonConf?.[1] !== undefined) return `systemd-${daemonConf[1]}.service`;
+
+  return undefined;
 }
 
 /**
@@ -133,6 +180,24 @@ const KINDS: readonly FileKind[] = [
     // itself: restart, then require it to stay up.
     reload: { argv: ['systemctl', 'restart', 'redis-server'], sudo: true, timeoutMs: WRITE_MS },
   },
+  {
+    // systemd. Editing a unit file and stopping there changes nothing a running
+    // service can see: `daemon-reload` is what makes systemd re-read it, and a
+    // restart is what makes the service use it. Before this entry existed, an
+    // edit here was written, nothing was reloaded, and the `restart_service` an
+    // agent reached for next reported success while running the old unit.
+    match: /^\/etc\/systemd\//,
+    prepare: { argv: ['systemctl', 'daemon-reload'], sudo: true, timeoutMs: WRITE_MS },
+    derive: (path) => {
+      const unit = systemdUnitFor(path);
+      return unit === undefined
+        ? {}
+        : {
+            unit,
+            reload: { argv: ['systemctl', 'restart', unit], sudo: true, timeoutMs: WRITE_MS },
+          };
+    },
+  },
 ];
 
 export interface EditConfigOptions {
@@ -146,6 +211,21 @@ export function createEditConfig(
   return {
     name: 'edit_config',
     risk: Risk.Config,
+    /**
+     * Planning writes nothing, so it is judged as a read.
+     *
+     * `mode: "plan"` reads the file, applies the diff in this process and returns
+     * the result with a plan hash. Treating it as a `config` action meant a human
+     * approved a dry run before they could see what they were being asked to
+     * approve, then approved the edit — two approvals and two extra turns for one
+     * change, which is what a benchmark run measured. DESIGN §3.4 says the
+     * approval-required response *is* the plan.
+     *
+     * The model cannot use this to get a write: `apply` branches on the same
+     * `mode` and returns before the `tee` for anything but `"apply"`, and the
+     * pipeline takes the stricter of this and the declared class.
+     */
+    effectiveRisk: (input) => (input.mode === 'plan' ? Risk.Read : Risk.Config),
     description: [
       'Edits a configuration file by applying a unified diff, with the file backed up',
       'first and the change undone automatically if it does not work.',
@@ -168,9 +248,12 @@ export function createEditConfig(
       'reloaded again.',
       '',
       'nginx is checked with nginx -t. Redis has no config checker, so it is restarted',
-      'and required to stay up. Files under /etc/ssh cannot be edited at all: sshd -t',
-      'proves a file parses, not that you can still log in, and Dwara reaches every',
-      'host over SSH.',
+      'and required to stay up. A systemd unit file gets systemctl daemon-reload and',
+      'then a restart of that unit, because a unit file on disk means nothing until',
+      'systemd has re-read it — editing one and restarting without the reload starts',
+      'the old unit and still reports success. Files under /etc/ssh cannot be edited at',
+      'all: sshd -t proves a file parses, not that you can still log in, and Dwara',
+      'reaches every host over SSH.',
     ].join('\n'),
     input,
 
@@ -227,10 +310,29 @@ export function createEditConfig(
       // never reloaded, so the running service keeps the file it already has.
       const reloadable =
         written.exitCode === 0 && (kind?.validator === undefined || validated.exitCode === 0);
-      const reloaded =
-        reloadable && kind?.reload !== undefined ? await ctx.run(kind.reload) : noop('');
 
-      return [current, noop(hash), noop(after), noop(params.diff), written, validated, reloaded];
+      // `prepare` runs first and is required to succeed: for systemd it is
+      // `daemon-reload`, and restarting a unit systemd has not re-read would
+      // start the old one while reporting success.
+      const prepared =
+        reloadable && kind?.prepare !== undefined ? await ctx.run(kind.prepare) : noop('');
+      const preparedOk = kind?.prepare === undefined || prepared.exitCode === 0;
+
+      const reloaded =
+        reloadable && preparedOk && kind?.reload !== undefined
+          ? await ctx.run(kind.reload)
+          : noop('');
+
+      return [
+        current,
+        noop(hash),
+        noop(after),
+        noop(params.diff),
+        written,
+        validated,
+        prepared,
+        reloaded,
+      ];
     },
 
     parse: (raws) => {
@@ -249,6 +351,7 @@ export function createEditConfig(
         planHash,
         changes: { added: 0, removed: 0, hunks: 0 },
         ...(kind?.validator === undefined ? {} : { validator: kind.validator.argv.join(' ') }),
+        ...(kind?.prepare === undefined ? {} : { prepare: kind.prepare.argv.join(' ') }),
         ...(kind?.reload === undefined ? {} : { reload: kind.reload.argv.join(' ') }),
       };
 
@@ -264,9 +367,12 @@ export function createEditConfig(
 
       const written = at(raws, 4);
       const validated = at(raws, 5);
-      const reloaded = at(raws, 6);
+      const prepared = at(raws, 6);
+      const reloaded = at(raws, 7);
       const validatorRan = kind?.validator !== undefined;
       const validatorOk = !validatorRan || validated.exitCode === 0;
+      const didPrepare = kind?.prepare !== undefined && prepared.argv.length > 0;
+      const prepareOk = !didPrepare || prepared.exitCode === 0;
       const didReload = kind?.reload !== undefined && reloaded.argv.length > 0;
 
       return {
@@ -282,10 +388,20 @@ export function createEditConfig(
             ? {
                 error: `${kind?.validator?.argv.join(' ') ?? 'validator'}: ${firstLine(validated)}`,
               }
-            : didReload && reloaded.exitCode !== 0
-              ? { error: `reload failed: ${firstLine(reloaded)}` }
-              : {}),
-        assessment: applyAssessment(written, validatorRan, validatorOk, didReload, reloaded, kind),
+            : !prepareOk
+              ? { error: `${kind?.prepare?.argv.join(' ') ?? 'prepare'}: ${firstLine(prepared)}` }
+              : didReload && reloaded.exitCode !== 0
+                ? { error: `reload failed: ${firstLine(reloaded)}` }
+                : {}),
+        assessment: applyAssessment(
+          written,
+          validatorRan,
+          validatorOk,
+          prepareOk,
+          didReload,
+          reloaded,
+          kind,
+        ),
       };
     },
 
@@ -338,7 +454,18 @@ function noop(stdout: string): RawResult {
 }
 
 function kindFor(path: string): FileKind | undefined {
-  return KINDS.find((kind) => kind.match.test(path));
+  const kind = KINDS.find((candidate) => candidate.match.test(path));
+  if (kind?.derive === undefined) return kind;
+
+  // Only keys the deriver actually produced are merged, so an absent `unit` does
+  // not overwrite a constant one with undefined.
+  const derived = kind.derive(path);
+  return {
+    ...kind,
+    ...(derived.unit === undefined ? {} : { unit: derived.unit }),
+    ...(derived.prepare === undefined ? {} : { prepare: derived.prepare }),
+    ...(derived.reload === undefined ? {} : { reload: derived.reload }),
+  };
 }
 
 function sha256(text: string): string {
@@ -405,6 +532,7 @@ function applyAssessment(
   written: RawResult,
   validatorRan: boolean,
   validatorOk: boolean,
+  prepareOk: boolean,
   didReload: boolean,
   reloaded: RawResult,
   kind: FileKind | undefined,
@@ -412,6 +540,9 @@ function applyAssessment(
   if (written.exitCode !== 0) return 'the file could not be written; nothing changed';
   if (validatorRan && !validatorOk) {
     return 'the new config failed its validator, so the service was NOT reloaded and is still running the old one';
+  }
+  if (!prepareOk) {
+    return `${kind?.prepare?.argv.join(' ') ?? 'the preparatory step'} failed, so nothing was reloaded and the service is still running the old configuration`;
   }
   if (didReload && reloaded.exitCode !== 0) return 'written and valid, but the reload failed';
   if (didReload) return `written, validated and ${kind?.unit ?? 'the service'} reloaded`;
