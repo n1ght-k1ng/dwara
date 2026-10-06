@@ -162,6 +162,27 @@ export const RULES: readonly RedactionRule[] = [
     group: 2,
   },
   {
+    /**
+     * A YAML block scalar: `password: |` and the value on the following lines.
+     *
+     * Found by the Phase 6 red-team pass, and the only leak it found. The rule
+     * above already reaches across a newline — `POSTGRES_PASSWORD:\n  value` is
+     * redacted — but the `|` or `>` indicator sits between the key and the value
+     * and stops it matching. Entropy analysis does not save it either, because
+     * that requires secret-like context **on the same line** and the value's own
+     * line is just an indented token.
+     *
+     * `read_config` on anything that keeps a credential this way would have
+     * returned it in full.
+     */
+    name: 'secret-assignment',
+    pattern: new RegExp(
+      `${KEY_PREFIX}${SECRET_KEY}${KEY_PREFIX}\\s*:\\s*[|>][-+]?[0-9]*[ \\t]*\\r?\\n([ \\t]+)([^\\n]{4,})`,
+      'gi',
+    ),
+    group: 2,
+  },
+  {
     // `requirepass a9f2…`, `api key: 9f2a…`, `TOKEN kY8m…` — whitespace
     // separated rather than assigned, which is how prose-ish log lines render
     // it. The value must contain a digit: without that the rule fires on

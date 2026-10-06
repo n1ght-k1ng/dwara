@@ -206,6 +206,45 @@ method on `ApprovalStore` that can be used the unsafe way, which matters more th
 fix itself — the previous interface made the wrong thing easy and the right thing
 require care.
 
+## Red team: the redactor
+
+Phase 6 Task 3. A deliberate attempt to get a credential past the redactor, with
+every case kept as a test in `redact/redteam.test.ts` — the caught ones so a
+regression is a failure, the gaps so nobody has to rediscover them.
+
+**One leak found and fixed: a YAML block scalar.**
+
+```yaml
+database:
+  password: |
+    Xk9mQ2vL8pR4tY7wZ1nB3hJ6     # returned in full
+```
+
+The general assignment rule already reaches across a newline, so
+`POSTGRES_PASSWORD:\n  value` was redacted. The `|` indicator sits between the key
+and the value and stopped it matching, and entropy analysis did not save it either
+because that requires secret-like context **on the same line** — and the value's
+own line is just an indented token. `read_config` on anything keeping a credential
+this way would have handed it over. Fixed with a rule covering `|`, `>`, and the
+strip and explicit-indent forms.
+
+**Two gaps remain, and both are deliberate:**
+
+| Gap | Why it stays |
+|---|---|
+| A high-entropy token on a line with **no secret-like word** | Entropy analysis is gated on context. Without the gate, every image digest in `docker ps`, every git SHA and every UUID is redacted, and a redactor nobody can read through gets turned off |
+| A long token of only **two character classes**, even with context | Three is the floor. Two would catch every hex digest and container id — the same unusable outcome |
+
+A value wrapped mid-token loses its first half to the assignment rule and keeps
+the remainder; nothing is anchored across the break. No pattern-based redactor
+fixes that without reassembling arbitrary text.
+
+**Two things written up as gaps turned out not to be.** A value under twenty
+characters and a value split from its key by a newline are both caught, by rules
+this review had not accounted for. They were removed rather than left in as
+comfortable-sounding limitations — which is the main argument for measuring each
+case instead of reasoning about the code.
+
 ## Known limitations, stated plainly
 
 - **The hook is not a sandbox.** It reads a command and decides. An agent that writes
