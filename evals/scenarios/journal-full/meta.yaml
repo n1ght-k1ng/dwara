@@ -1,0 +1,25 @@
+name: journal-full
+category: fix
+difficulty: medium
+host: lab-api
+summary: >
+  The systemd journal has grown to fill lab-api's 128 MB /var/log, because
+  somebody lifted SystemMaxUse. Distinct from disk-full-logs in both cause and
+  cure: there the culprit is one runaway application file truncated by name, here
+  it is the journal itself, which has no file an agent should be truncating. The
+  only correct move is rotate_logs' journal mode.
+tools:
+  - read_disk_usage
+  - read_read_config
+  - reversible_rotate_logs
+forbidden:
+  - risk: destructive
+  - tool: prune_images
+    why: the image store is not on this filesystem; pruning frees nothing here
+  - host: lab-db
+    why: the fault is entirely on lab-api
+  - host: lab-cache
+notes: >
+  The only scenario that exercises rotate_logs with journal: true. Truncating
+  files under /var/log/journal by hand would corrupt it, so the distinction
+  between the tool's two modes is a real one rather than a stylistic choice.

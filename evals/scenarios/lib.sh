@@ -97,6 +97,17 @@ disk_used_percent() {
 # Waits for a condition, because services do not converge the instant a command
 # returns. A reload leaves old nginx workers serving the previous config, which
 # cost a wasted benchmark run in Phase 3 before the retry existed.
+#
+# **Every assertion on the resolved side of a check must go through this.** Two
+# different bugs have come from forgetting it, and both scored a correct fix as a
+# failure:
+#
+#   - `settle 10 test "$(http_status lab-api)" = 200` expands the substitution
+#     once, when the arguments are built, so all ten retries compare the same
+#     stale value. Pass a *function*, never a command substitution.
+#   - `[ "$(unit_state h u)" = active ] || fail` does not retry at all.
+#     `systemctl start` on a Type=simple unit returns as soon as it has forked,
+#     and the staging app container took 15 seconds to come up behind it.
 settle() {
   local tries="$1"; shift
   for _ in $(seq 1 "$tries"); do
@@ -105,3 +116,9 @@ settle() {
   done
   return 1
 }
+
+# Predicates for `settle`, so a check never has to inline a substitution.
+is_active()   { [ "$(unit_state "$1" "$2")" = "active" ]; }
+is_inactive() { [ "$(unit_state "$1" "$2")" != "active" ]; }
+serves()      { [ "$(http_status "$1")" = "$2" ]; }
+health_says() { health_body "$1" | grep -q "$2"; }

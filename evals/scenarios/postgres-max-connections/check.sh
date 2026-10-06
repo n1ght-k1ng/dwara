@@ -18,8 +18,7 @@ if [ "$MODE" = "--broken" ]; then
 fi
 
 [ "$(limit)" -gt 5 ] || fail "max_connections is still $(limit)"
-[ "$(unit_state lab-db postgresql@16-main.service)" = "active" ] \
+settle 20 is_active lab-db postgresql@16-main.service \
   || fail "postgres is $(unit_state lab-db postgresql@16-main.service)"
-settle 20 bash -c 'test "$(docker exec lab-api curl -sk -o /dev/null -w %{http_code} --max-time 10 https://127.0.0.1/health 2>/dev/null)" = 200' \
-  || fail "lab-api /health is $(http_status lab-api), not 200"
+settle 20 serves lab-api 200 || fail "lab-api /health is $(http_status lab-api), not 200"
 pass "max_connections raised to $(limit) and lab-api serves /health"

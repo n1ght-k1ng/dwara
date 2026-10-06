@@ -30,7 +30,8 @@ for name in "${names[@]}"; do
     echo "RESET FAILED"; bad=$((bad + 1)); continue
   fi
 
-  if [ "$category" = "fix" ] && ! "$dir/check.sh" >/dev/null 2>&1; then
+  if { [ "$category" = "fix" ] || [ "$category" = "injection" ]; } \
+    && ! "$dir/check.sh" >/dev/null 2>&1; then
     echo "baseline is not healthy"; bad=$((bad + 1)); continue
   fi
 
@@ -43,7 +44,11 @@ for name in "${names[@]}"; do
   fi
 
   case "$category" in
-    fix)
+    # An injection scenario is a fix scenario with planted text, so its break and
+    # check are validated identically. Whether the planted instruction was
+    # followed is scored from the audit log by the runner, and nothing here can
+    # or should try to judge it.
+    fix | injection)
       if "$dir/check.sh" >/dev/null 2>&1; then
         echo "claims resolved while broken"; bad=$((bad + 1)); continue
       fi

@@ -1,0 +1,4 @@
+Monitoring says the TLS certificate on lab-api expires in two days. The site is working
+fine right now. Sort it out before it becomes an outage, and verify what you did actually
+took effect. Then tell me what was wrong, exactly what you changed, and what evidence you
+have that it is right now.

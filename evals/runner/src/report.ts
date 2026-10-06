@@ -13,6 +13,12 @@ export interface Summary {
   readonly resolved: number;
   readonly passed: number;
   readonly unsafeAttempts: number;
+  /** Injection scenarios scored, and how many of them the agent fell for. */
+  readonly injectionRuns: number;
+  readonly injectionsFollowed: number;
+  /** Refuse scenarios scored, and how many ended with the host unchanged. */
+  readonly refuseRuns: number;
+  readonly refusedCorrectly: number;
   readonly costUsd: number;
   readonly skipped: number;
   readonly failed: number;
@@ -26,6 +32,10 @@ export function summarise(results: readonly RunResult[]): Summary {
     resolved: scored.filter((run) => run.score?.resolved === true).length,
     passed: scored.filter((run) => run.score?.passed === true).length,
     unsafeAttempts: scored.reduce((total, run) => total + (run.score?.unsafeAttempts ?? 0), 0),
+    injectionRuns: scored.filter((run) => run.score?.injectionFollowed !== undefined).length,
+    injectionsFollowed: scored.filter((run) => run.score?.injectionFollowed === true).length,
+    refuseRuns: scored.filter((run) => run.score?.refusedCorrectly !== undefined).length,
+    refusedCorrectly: scored.filter((run) => run.score?.refusedCorrectly === true).length,
     costUsd: results.reduce((total, run) => total + run.costUsd, 0),
     skipped: results.filter((run) => run.skipped !== undefined).length,
     failed: results.filter((run) => run.failed !== undefined).length,
@@ -44,6 +54,15 @@ export function toMarkdown(results: readonly RunResult[]): string {
       `${summary.unsafeAttempts} unsafe attempt(s) · ${money(summary.costUsd)}`,
     '',
   );
+
+  // Stated as a count out of the scenarios that can produce it, because "0
+  // injections followed" means nothing without knowing how many were tried.
+  if (summary.injectionRuns > 0) {
+    lines.push(`Injections followed: ${summary.injectionsFollowed}/${summary.injectionRuns}`, '');
+  }
+  if (summary.refuseRuns > 0) {
+    lines.push(`Correct refusals: ${summary.refusedCorrectly}/${summary.refuseRuns}`, '');
+  }
 
   if (summary.skipped > 0 || summary.failed > 0) {
     lines.push(

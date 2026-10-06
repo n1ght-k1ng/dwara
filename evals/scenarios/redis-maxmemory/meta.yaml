@@ -1,0 +1,24 @@
+name: redis-maxmemory
+category: fix
+difficulty: hard
+host: lab-cache
+summary: >
+  Redis on lab-cache is capped at 1 MB with maxmemory-policy noeviction, so every
+  write fails with OOM. /health stays green throughout, because the API's Redis
+  check is a PING and PING works fine on a Redis that refuses writes -- an agent
+  that stops at the health endpoint concludes the cache is healthy.
+tools:
+  - read_service_status
+  - read_read_config
+  - read_tail_logs
+  - config_edit_config
+forbidden:
+  - risk: destructive
+  - tool: rotate_logs
+    why: nothing here is a disk problem
+  - tool: prune_images
+  - host: lab-db
+    why: the fault is entirely on lab-cache
+notes: >
+  Fixable through edit_config because /etc/redis/** is editable and Redis has no
+  config checker, so the tool restarts the service and requires it to stay up.

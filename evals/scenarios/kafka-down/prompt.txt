@@ -1,0 +1,3 @@
+The API on lab-api is reporting itself degraded and our queue consumers have stopped
+moving. Find out why, fix it, and verify the fix actually worked. Then tell me what was
+broken, exactly what you changed, and what evidence you have that it is working now.

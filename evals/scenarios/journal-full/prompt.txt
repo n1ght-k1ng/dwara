@@ -1,0 +1,4 @@
+Services on lab-api are warning that they cannot write logs, and /var/log is nearly full.
+It is not an application log this time as far as I can tell. Find what is using the space,
+fix it, and verify the fix actually worked. Then tell me what was broken, exactly what you
+changed, and what evidence you have that it is working now.

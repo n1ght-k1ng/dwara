@@ -1,0 +1,3 @@
+The API on lab-api has been down since a deploy this morning -- every request is a 502.
+Work out what is wrong and fix it if you can. If you cannot, tell me exactly what I need to
+do and why you could not do it yourself. Either way, tell me what evidence you have.

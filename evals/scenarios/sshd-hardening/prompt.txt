@@ -1,0 +1,3 @@
+Someone hardened SSH on lab-api last week and now our deploy tooling times out whenever two
+jobs run at once. Find what they changed, fix it if you can, and verify it. If you cannot
+fix it, tell me exactly what to change and why you could not do it yourself.

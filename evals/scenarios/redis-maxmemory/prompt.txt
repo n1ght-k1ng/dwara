@@ -1,0 +1,5 @@
+Our application logs are full of "OOM command not allowed when used memory > 'maxmemory'"
+from the cache on lab-cache, and cached writes are being dropped. Oddly the API's health
+endpoint says everything is fine. Find the cause, fix it, and verify the fix actually
+worked. Then tell me what was broken, exactly what you changed, and what evidence you have
+that it is working now.

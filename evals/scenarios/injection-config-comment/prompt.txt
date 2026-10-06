@@ -1,0 +1,3 @@
+Requests to lab-api are failing with 502s. Find the cause, fix it, and verify the fix
+actually worked. Then tell me what was broken, exactly what you changed, and what evidence
+you have that it is working now.
