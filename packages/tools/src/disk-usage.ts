@@ -37,7 +37,8 @@ export interface Filesystem {
   readonly usedPercent: number | undefined;
 }
 
-export interface DirectorySize {
+/** One entry under the requested path: a file or a directory. */
+export interface EntrySize {
   readonly path: string;
   readonly bytes: number | undefined;
 }
@@ -52,8 +53,8 @@ export interface DockerUsage {
 
 export interface DiskUsage {
   readonly filesystem: Filesystem | undefined;
-  /** Immediate children of the requested path, largest first. */
-  readonly largestDirectories: readonly DirectorySize[];
+  /** Immediate children of the requested path -- files and directories -- largest first. */
+  readonly largestEntries: readonly EntrySize[];
   readonly docker?: readonly DockerUsage[] | Unavailable;
   /** Plain reading of the numbers, so a full disk is not missed. */
   readonly assessment: string;
@@ -69,12 +70,16 @@ export const diskUsage: BuiltToolDef<Input, DiskUsage> = {
   name: 'disk_usage',
   risk: Risk.Read,
   description: [
-    'How full the filesystem holding a path is, and which directories directly under',
-    'that path are largest. Sizes are in bytes. Optionally includes what Docker is',
-    'using.',
+    'How full the filesystem holding a path is, and which files and directories',
+    'directly under that path are largest. Sizes are in bytes. Optionally includes',
+    'what Docker is using.',
     '',
-    'Start with path "/" and follow `largestDirectories` downward — call again with the',
-    'largest child to descend. `usedPercent` at or near 100 with `availableBytes` of 0',
+    'Start with path "/" and follow `largestEntries` downward — call again with the',
+    'largest child to descend. Keep descending until the entries are files: those',
+    'paths are what rotate_logs takes, and guessing a log file name instead of',
+    'reading it here is how the wrong file gets truncated.',
+    '',
+    '`usedPercent` at or near 100 with `availableBytes` of 0',
     'is a full filesystem, which makes services fail in ways that look unrelated:',
     'databases refuse writes, journald drops messages, nginx cannot log.',
     '',
@@ -91,7 +96,18 @@ export const diskUsage: BuiltToolDef<Input, DiskUsage> = {
       { argv: ['df', '-P', '-B1', '--', params.path], timeoutMs: READ_TIMEOUT_MS },
       // -d1 keeps this to one level: a recursive du on / is slow enough to hit
       // the timeout on a real host and returns far more than anyone can read.
-      { argv: ['du', '-B1', '-d1', '--', params.path], sudo: true, timeoutMs: READ_TIMEOUT_MS },
+      //
+      // -a lists files as well as directories, and without it this tool could
+      // not finish a disk investigation. `du -d1` on a log directory reports one
+      // total and names nothing inside it, and `rotate_logs` needs exact file
+      // paths -- so the last step was unreachable. A benchmark run found it: the
+      // agent diagnosed a full /var/log, narrowed it to /var/log/lab-api, had no
+      // way to see the file inside, and correctly declined to truncate a guess.
+      {
+        argv: ['du', '-B1', '-d1', '-a', '--', params.path],
+        sudo: true,
+        timeoutMs: READ_TIMEOUT_MS,
+      },
     ];
 
     if (params.includeDocker) {
@@ -113,7 +129,7 @@ export const diskUsage: BuiltToolDef<Input, DiskUsage> = {
     const sizes = columns(at(raws, 1).stdout, 2)
       .map(([bytes, path]) => ({ path: (path ?? '').trim(), bytes: toNumber(bytes) }))
       // du prints the requested directory itself last; the children are what
-      // tell you where the space went.
+      // tell you where the space went. With -a those children include files.
       .filter((entry) => entry.path !== '' && entry.path !== requested)
       .sort((a, b) => (b.bytes ?? 0) - (a.bytes ?? 0))
       .slice(0, 20);
@@ -133,7 +149,7 @@ export const diskUsage: BuiltToolDef<Input, DiskUsage> = {
 
     return {
       filesystem,
-      largestDirectories: sizes,
+      largestEntries: sizes,
       ...(docker === undefined ? {} : { docker }),
       assessment: assess(filesystem),
     };

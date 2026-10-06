@@ -319,16 +319,41 @@ describe('disk_usage', () => {
   it('lists children largest first and drops the directory itself', () => {
     const raws = [
       asResult(fixture('healthy/disk_usage.df')),
-      asResult(fixture('healthy/disk_usage.du'), { argv: ['du', '-B1', '-d1', '--', '/var/log'] }),
+      asResult(fixture('healthy/disk_usage.du'), {
+        argv: ['du', '-B1', '-d1', '-a', '--', '/var/log'],
+      }),
     ];
     const result = diskUsage.parse(raws);
 
-    expect(result.largestDirectories.map((entry) => entry.path)).toEqual([
+    expect(result.largestEntries.map((entry) => entry.path)).toEqual([
       '/var/log/journal',
       '/var/log/nginx',
+      '/var/log/wtmp',
+      '/var/log/README',
       '/var/log/private',
+      '/var/log/btmp',
+      '/var/log/lastlog',
     ]);
-    expect(result.largestDirectories[0]?.bytes).toBe(16777216);
+    expect(result.largestEntries[0]?.bytes).toBe(16777216);
+    expect(result.largestEntries.map((entry) => entry.path)).not.toContain('/var/log');
+  });
+
+  it('names the file that filled a directory, not just the directory', () => {
+    // The gap a benchmark run found. `du -d1` on a log directory reports one
+    // total and names nothing inside it, and rotate_logs takes exact file
+    // paths -- so the agent could see /var/log/lab-api was 112 MB, could not
+    // see what was in it, and correctly refused to truncate a guess.
+    const result = diskUsage.parse([
+      asResult(fixture('broken/diskfull.df')),
+      asResult(fixture('broken/diskfull.du-files'), {
+        argv: ['du', '-B1', '-d1', '-a', '--', '/var/log/lab-api'],
+      }),
+    ]);
+
+    expect(result.largestEntries.map((entry) => entry.path)).toEqual([
+      '/var/log/lab-api/debug.log',
+    ]);
+    expect(result.largestEntries[0]?.bytes).toBe(117432320);
   });
 
   it('calls a full filesystem full', () => {

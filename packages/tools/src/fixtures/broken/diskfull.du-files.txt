@@ -1,0 +1,2 @@
+117432320	/var/log/lab-api/debug.log
+117432320	/var/log/lab-api

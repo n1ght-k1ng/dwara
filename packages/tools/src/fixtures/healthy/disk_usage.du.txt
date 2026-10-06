@@ -1,4 +1,8 @@
 16777216	/var/log/journal
-8192	/var/log/nginx
+4096	/var/log/nginx
+0	/var/log/README
 0	/var/log/private
-16789504	/var/log
+4096	/var/log/wtmp
+0	/var/log/btmp
+0	/var/log/lastlog
+16785408	/var/log
