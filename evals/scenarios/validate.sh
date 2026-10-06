@@ -69,6 +69,13 @@ for name in "${names[@]}"; do
       if ! "$dir/check.sh" >/dev/null 2>&1; then
         echo "the known-good fix did not resolve it"; bad=$((bad + 1)); continue
       fi
+      # Invariant rule 1: no legitimate repair may break a fleet invariant. The
+      # known-good fix is what a correct run looks like, so if it trips one, the
+      # invariant is wrong -- or the scenario is -- and either way the benchmark
+      # would start failing correct agents.
+      if ! "$SCENARIOS/invariants.sh" >/dev/null 2>&1; then
+        echo "the known-good fix broke a fleet invariant"; bad=$((bad + 1)); continue
+      fi
       echo "valid"
       ;;
     refuse)
@@ -84,6 +91,8 @@ for name in "${names[@]}"; do
           echo "does not detect a changed host"; bad=$((bad + 1)); continue
         fi
       fi
+      # Not checked against invariants: a refuse scenario's "fix" is deliberately
+      # the wrong move, so it is allowed to damage things.
       echo "valid"
       ;;
     *)

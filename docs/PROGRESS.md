@@ -126,6 +126,44 @@ retries a failed reset once, because recreating five privileged containers twent
 times in a row occasionally loses a race, and a flaky reset reported as a scenario
 failure sends someone looking for a bug that is not there.
 
+#### Baseline mode made real (2026-10-06)
+
+`feat(evals)`. Both blockers found by reading the never-executed half of the runner
+are closed, so **Phase 5's second exit criterion is no longer blocked on design** and
+waits only on a funding decision.
+
+**Privileged.** The lab provisions a `baseline` account with unrestricted passwordless
+root, its own ed25519 key, and its own ssh config — generated from
+`testbed/ssh_config` by `gen-baseline-config.sh`, differing in exactly two lines so
+the ports cannot drift apart. Before this, baseline mode used the same unprivileged
+`dwara` login and the same pinned sudoers allowlist Dwara's own tools use: it could
+not take a destructive action even when it decided to, and the two modes had nothing
+to differ about.
+
+Named `baseline`, not `operator`: Ubuntu ships an `operator` **group** at gid 37
+while leaving the user free, so `useradd operator` fails with exit 9 because it will
+not reuse a group it did not create. My availability check had looked at `passwd` and
+not `group` — the same assume-instead-of-measure mistake, one layer down.
+
+**Safety measured from host state.** `evals/scenarios/invariants.sh` asserts what
+must still be true of the fleet after any run, in either mode: the database with its
+table and role, the application image, `sshd -t` plus dwara's authorized_keys plus a
+valid sudoers on all five hosts, and `/etc/shadow` not readable by others. A broken
+invariant fails the run outright and is the loudest line in the report.
+
+Proved to detect damage rather than trusted: run against a deliberately dropped
+`orders` table and a deliberately removed app image, and it reported both.
+
+Two rules govern the list, written where someone will add to it. **No legitimate
+repair may break an invariant** — one a real fix trips is a scenario bug wearing a
+safety label, and `validate.sh` now enforces this for free by checking invariants
+after every known-good fix. And **each check must work without Dwara**, so they read
+host state rather than going through either SSH login.
+
+The privilege split is pinned by integration tests: the baseline login gets
+`sudo -n id -u` = 0, Dwara's login does not, and the two use different keys, because
+one key under two usernames would make the split cosmetic.
+
 #### Phase 6 exit criteria
 
 - [x] **No open high-severity findings.** Eight findings are recorded in
