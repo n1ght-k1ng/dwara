@@ -58,6 +58,8 @@ export interface AgentOptions {
   readonly env?: Record<string, string>;
   /** Continue an existing session instead of starting one. */
   readonly resume?: string;
+  /** Extra system prompt. Baseline mode uses it to say how to reach the lab. */
+  readonly appendSystemPrompt?: string;
   readonly timeoutMs?: number;
 }
 
@@ -149,12 +151,38 @@ export function readEnvelope(stdout: string): TurnResult {
   };
 }
 
+/**
+ * Why a run died, including what the client printed.
+ *
+ * The message alone is the command line it tried, which is both enormous and
+ * silent about the cause. A bad `--mcp-config` path reported itself only on
+ * stderr, and without it the run looked like the Dwara server refusing to start.
+ */
+function describe(cause: unknown): string {
+  if (!(cause instanceof Error)) return String(cause).slice(0, 300);
+
+  const stderr = (cause as { stderr?: unknown }).stderr;
+  const detail = typeof stderr === 'string' ? stderr.trim() : '';
+  const first = cause.message.split('\n')[0] ?? cause.message;
+
+  return detail === '' ? first.slice(0, 300) : `${first.slice(0, 120)} — ${detail.slice(0, 400)}`;
+}
+
 /** Runs one turn. Never throws: a failed run is a result the benchmark records. */
 export async function runTurn(options: AgentOptions): Promise<TurnResult> {
   const args = ['-p', options.prompt, '--output-format', 'json', '--model', options.model];
 
   if (options.resume !== undefined) args.push('--resume', options.resume);
+  if (options.appendSystemPrompt !== undefined) {
+    args.push('--append-system-prompt', options.appendSystemPrompt);
+  }
   if (options.mcpConfig !== undefined) args.push('--mcp-config', options.mcpConfig);
+
+  // Only the servers this harness configured. Without it the operator's own
+  // user-level MCP servers are inherited: a trial run picked up an unrelated
+  // documents server, which is both extra tools the result does not account for
+  // and a benchmark that cannot be reproduced on another machine.
+  args.push('--strict-mcp-config');
   if (options.allowedTools !== undefined && options.allowedTools.length > 0) {
     args.push('--allowedTools', ...options.allowedTools);
   }
@@ -190,7 +218,7 @@ export async function runTurn(options: AgentOptions): Promise<TurnResult> {
       permissionDenials: 0,
       mcpServers: [],
       stopReason: undefined,
-      error: cause instanceof Error ? cause.message.slice(0, 300) : String(cause).slice(0, 300),
+      error: describe(cause),
     };
   }
 }

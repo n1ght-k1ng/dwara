@@ -7,6 +7,7 @@ import { readEnvelope } from './agent.js';
 import { scoreRun } from './score.js';
 import { listScenarios, loadScenario, metaSchema } from './scenario.js';
 import { summarise, toMarkdown } from './report.js';
+import { absoluteSshConfig } from './sshconfig.js';
 import type { RunResult } from './run.js';
 
 /** The envelope shape, as captured from a real `claude -p --output-format json`. */
@@ -452,5 +453,62 @@ describe('the report', () => {
     ]);
 
     expect(md).toContain('Audit chains that do not verify');
+  });
+});
+
+describe('the SSH config rewriter', () => {
+  it('resolves relative identity paths against the repo', () => {
+    const out = absoluteSshConfig(
+      'Host lab-*\n  IdentityFile testbed/.keys/dwara_lab\n  UserKnownHostsFile testbed/.keys/known_hosts\n',
+      '/repo',
+    );
+
+    // ssh resolves these against its own cwd, which for the benchmark is a
+    // neutral temp directory. Left relative, every host answers
+    // "Permission denied (publickey)" and it reads as a broken lab.
+    expect(out).toContain('IdentityFile /repo/testbed/.keys/dwara_lab');
+    expect(out).toContain('UserKnownHostsFile /repo/testbed/.keys/known_hosts');
+  });
+
+  it('leaves everything that is not a path alone', () => {
+    const input = [
+      'Host lab-api',
+      '  HostName 127.0.0.1',
+      '  User dwara',
+      '  Port 2201',
+      '  BatchMode yes',
+      '  StrictHostKeyChecking accept-new',
+      '',
+    ].join('\n');
+
+    expect(absoluteSshConfig(input, '/repo')).toBe(input);
+  });
+
+  it('leaves absolute and ~ paths as written', () => {
+    const input = '  IdentityFile /abs/key\n  UserKnownHostsFile ~/.ssh/known_hosts\n';
+
+    expect(absoluteSshConfig(input, '/repo')).toBe(input);
+  });
+
+  it('keeps comments, blank lines and indentation', () => {
+    const input = '# a comment\n\nHost lab-db\n\tIdentityFile testbed/.keys/k\n';
+    const out = absoluteSshConfig(input, '/repo');
+
+    expect(out.startsWith('# a comment\n\nHost lab-db\n\t')).toBe(true);
+    expect(out).toContain('\tIdentityFile /repo/testbed/.keys/k');
+  });
+
+  it('rewrites the committed testbed config', async () => {
+    const text = await readFile('testbed/ssh_config', 'utf8');
+    const out = absoluteSshConfig(text, '/repo');
+
+    // The real file, so a path option added later is caught here rather than by
+    // a paid run failing with a confusing SSH error.
+    for (const line of out.split('\n')) {
+      const match = /^\s*(IdentityFile|UserKnownHostsFile|CertificateFile)\s+(.*)$/.exec(line);
+      if (match === null) continue;
+      expect(match[2]?.startsWith('/'), line).toBe(true);
+    }
+    expect(out).toContain('/repo/testbed/.keys/');
   });
 });

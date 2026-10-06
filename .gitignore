@@ -27,3 +27,8 @@ dwara-plan.zip
 
 # The plugin bundles a copy of the hook at build time; the source is in packages/hook.
 packages/plugin-claude-code/hook/
+
+# Benchmark run artefacts. Each run writes a generated mcp.json and ssh_config
+# holding absolute paths from the machine it ran on, so the directory is local
+# scratch. Published results are committed deliberately, not by sweeping this up.
+evals/results/

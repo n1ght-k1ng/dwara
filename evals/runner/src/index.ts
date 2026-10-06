@@ -17,6 +17,7 @@ export type { Score } from './score.js';
 export { readEnvelope, runTurn } from './agent.js';
 export type { TurnResult, Usage } from './agent.js';
 export { summarise, toJson, toMarkdown } from './report.js';
+export { absoluteSshConfig } from './sshconfig.js';
 export type { Summary } from './report.js';
 
 /**
