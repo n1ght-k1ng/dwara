@@ -85,8 +85,11 @@ SSH key.
 and `pnpm.overrides` pins two transitive build-tool packages to patched versions;
 `pnpm audit` is clean including dev dependencies.
 
-Releases are published with npm provenance, so the published artifact is
-attestably built from this repository.
+**Nothing is published yet.** Every package is `private: true`, there is no release
+workflow, and the npm scope is undecided. When that changes, releases will carry
+npm provenance so the published artifact is attestably built from this
+repository — but that is a commitment for Phase 8, not a description of today, and
+this paragraph should be rewritten the moment the first release goes out.
 
 ## What is enforced in code, not configuration
 

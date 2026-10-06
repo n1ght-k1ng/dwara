@@ -54,12 +54,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check testbed scripts
+      - name: Check testbed and scenario scripts
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          if compgen -G 'testbed/**/*.sh' > /dev/null; then
-            shellcheck --severity=warning $(find testbed -name '*.sh')
+          # evals/scenarios is included deliberately: 21 scenarios are two shell
+          # scripts each, every bug in them produces a confidently wrong
+          # benchmark number rather than an error, and three such bugs were found
+          # by hand in Phase 5. shellcheck does not catch the subtle ones -- a
+          # `cmd || echo fallback` that appends to real output, or a command
+          # substitution expanded once before a retry loop -- but it is free and
+          # it catches the rest.
+          mapfile -t scripts < <(find testbed evals/scenarios -name '*.sh' 2>/dev/null | sort)
+          if [ ${#scripts[@]} -gt 0 ]; then
+            shellcheck --severity=warning "${scripts[@]}"
           else
-            echo "no testbed scripts yet"
+            echo "no shell scripts yet"
           fi
         shell: bash

@@ -88,6 +88,24 @@ permits `find /var/log -exec rm -rf / {} +`.
 list so a report is not wasted — each entry saying what the in-scope version of the
 same report would be.
 
+CI's shellcheck job now covers `evals/scenarios` as well as `testbed`. Worth doing
+because 21 scenarios are two shell scripts each, and a bug in one produces a
+confidently wrong benchmark number rather than an error — three were found by hand in
+Phase 5. It found two things (an unguarded `cd` in `validate.sh`, and `MODE` looking
+unused because only sourcing scripts read it); all 46 scripts are now clean. It does
+**not** catch the subtle ones: neither the `cmd || echo fallback` that appends to real
+output nor a command substitution expanded once before a retry loop is a shellcheck
+rule, and both of those were today's actual bugs.
+
+**Provenance publishing is deferred to Phase 8, deliberately.** Every package is
+`private: true`, there is no `.changeset/`, and the npm scope is still an open
+question — a release workflow written now would hardcode a guess, and an armed
+publish workflow is a liability before anyone wants to publish. What Phase 8 needs:
+`id-token: write` permission, `npm publish --provenance`, changesets for versioning,
+and signed tags. `SECURITY.md` previously claimed releases *are* published with
+provenance; that was a forward-looking sentence in a security document, which is the
+wrong place for one, and it now says plainly that nothing is published yet.
+
 **The dependency audit is clean, including dev dependencies.** It started at 6
 advisories, 2 critical. All were in the test and build toolchain and `pnpm audit --prod`
 was already clean, but "only dev dependencies" is a bad habit in a repo whose job is

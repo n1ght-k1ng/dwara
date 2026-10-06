@@ -30,6 +30,9 @@ REPO_DIR="$(cd "$EVAL_DIR/../.." && pwd)"
 source "$REPO_DIR/testbed/scripts/common.sh"
 
 # What `check.sh` was asked. Scenarios branch on this.
+#
+# Read by every check.sh that sources this file, which shellcheck cannot see.
+# shellcheck disable=SC2034
 MODE="${1:-resolved}"
 
 # Reports a satisfied assertion and exits 0.

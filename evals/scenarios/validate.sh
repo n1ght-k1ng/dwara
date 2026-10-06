@@ -10,7 +10,10 @@
 # to do with the agent, and the result will look like a finding.
 set -uo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+# `|| exit`: without it a failed cd leaves the script running in whatever
+# directory it was invoked from, where `./testbed/scripts/reset.sh` either does
+# not exist or is somebody else's.
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
 SCENARIOS="evals/scenarios"
 FIXES="evals/scenarios/fixes"
 bad=0
