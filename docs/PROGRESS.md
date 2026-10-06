@@ -1168,6 +1168,10 @@ the repo; Phase 5 replaces it with the real benchmark runner under `evals/`.
   left as unreachable code. Reading a unit file is still allowed; the right outcome is Dwara telling a
   person which line to change. Recorded in `docs/DESIGN.md` under Decisions.
 - Final project name and npm scope. Packages are `@dwara/*` and private for now.
+- **How to pay for the full matrix — parked 2026-10-06, deliberately.** Not blocked on
+  anything technical any more: the harness works, 21 scenarios validate, and baseline mode
+  is a real comparison. It needs a spending decision and nothing else, so it waits until
+  someone wants the headline numbers. Detail kept below for whoever picks it up.
 - **How to pay for the full matrix.** 21 scenarios × 2 models × 2 modes = 84 runs. A
   Dwara-mode Sonnet run measures ~340k tokens (notional $0.40–$0.74, mean ~$0.52), so the
   matrix is roughly **28M tokens, or $20–30 on API billing** including reruns. On the
