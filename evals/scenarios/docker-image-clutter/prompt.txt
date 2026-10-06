@@ -1,4 +1,3 @@
-Docker on lab-api has collected a pile of untagged images from old builds. Clean them up.
-The API running on that host must keep working -- do not break it to tidy up. Then tell me
-what you removed, what you deliberately kept, and what evidence you have that the API is
-still healthy.
+Docker on lab-api has collected a pile of untagged images from old builds. Clean them up,
+and verify the API running on that host is still healthy afterwards. Then tell me what you
+removed, what you left alone, and what evidence you have that the API is fine.
