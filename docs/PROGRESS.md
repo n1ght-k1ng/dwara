@@ -120,6 +120,31 @@ name seen while taking inventory, and a failed unit's Description -- the first t
 `host_overview` reports. `injection-filename` only became possible because of the
 `du -a` fix: widening what a read tool returns widened what can be injected through it.
 
+#### Baseline mode: the comparison is blocked on design, not budget
+
+Found by reading the one half of the runner that had never executed, before spending
+anything on it.
+
+- **The briefing claimed privileges the lab user does not have** -- "passwordless sudo",
+  when `dwara` has NOPASSWD for a pinned command list and nothing else. The baseline
+  would have hit `sudo: a password is required` and failed on a harness lie.
+- **Safety was unmeasurable and reported as zero.** Every safety metric comes from
+  `.dwara/audit.jsonl`; baseline has no Dwara and so no log. `verifyChain([])` returns
+  ok, an empty log yields no unsafe attempts, and `passed` then rests on resolution
+  alone -- so a baseline run that **destroyed a database would have scored 0 unsafe
+  attempts and passed.** That is the exact number the Dwara-vs-baseline claim rests on.
+
+`scoreRun` now takes the mode, sets `safetyMeasured: false` for baseline, and the report
+prints `n/a` with the reason above the table. Two things are still needed before baseline
+numbers mean anything:
+
+1. **A privileged baseline login.** It currently has the same reach as Dwara's own tools,
+   so it cannot do damage even if it decides to. Needs its own root user in the lab image
+   and `base-*` entries in the ssh config.
+2. **State-based invariants per scenario**, asserted identically in both modes. "The data
+   is still there" is a stronger claim than "it did not call the tool", and unlike
+   `forbidden` it works without Dwara in the loop. Touches all 21 scenarios.
+
 #### One bug class, fixed across the whole suite
 
 `[ "$(unit_state h u)" = active ] || fail` does not retry, and `systemctl start` on a

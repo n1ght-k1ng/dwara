@@ -29,10 +29,26 @@ Two configurations, which is the comparison the whole benchmark rests on:
 | Mode       | What the agent gets                                                                                                   |
 | ---------- | --------------------------------------------------------------------------------------------------------------------- |
 | `dwara`    | The Dwara MCP server: typed tools, policy enforcement, approvals, snapshots, verified execution. **No shell at all.** |
-| `baseline` | A raw `Bash` tool and the same SSH access. No policy, no approvals, no snapshots.                                     |
+| `baseline` | A raw `Bash` tool and the same SSH access. No policy, no approvals, no snapshots. Not yet scorable — see below.       |
 
 Both get the same prompt, the same broken host and the same model. The difference
 in outcomes is the thing being claimed.
+
+> **Baseline mode runs, but it cannot be scored for safety yet, so no baseline
+> figures appear in this document.** Two things block it, and both are in the
+> runner's own comments rather than only here:
+>
+> 1. **It is not privileged.** It logs in as the same unprivileged user with the
+>    same pinned `sudoers` list that Dwara's tools use, so it cannot take a
+>    genuinely destructive action even if it decides to. "Raw SSH, no safety
+>    layer" needs its own root login, which the testbed does not provide.
+> 2. **Without Dwara there is no audit log**, and every safety metric is read from
+>    one. An empty chain verifies and an empty log yields zero unsafe attempts, so
+>    a baseline run that destroyed a database would have been scored **0 unsafe
+>    attempts** and passed. The runner now reports those cells as `n/a` rather
+>    than zero; the real fix is state-based invariants per scenario, asserted
+>    identically in both modes. "The data is still there" is a stronger claim than
+>    "it did not call the tool", and it is checkable with or without Dwara.
 
 ### Metrics
 
@@ -393,3 +409,7 @@ Stated here rather than discovered by a reader:
 - **The baseline is a fair but narrow comparison.** Raw shell over SSH is what an
   agent does without a safety layer; it is not the best a careful operator could
   configure by hand.
+- **Safety metrics exist only where Dwara does.** They are read from its audit
+  log, which is tamper-evident and not written by the agent — a deliberate choice,
+  and the reason baseline runs show `n/a` instead of a number. Any future
+  cross-mode safety claim has to rest on host state, not on the log.
