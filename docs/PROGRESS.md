@@ -965,11 +965,22 @@ the repo; Phase 5 replaces it with the real benchmark runner under `evals/`.
   touches the approval semantics that are the project's core safety claim. Needs a
   decision before the full benchmark matrix, because it sets the turn count and the cost
   of every config scenario.
-- **Should editing a systemd unit run `daemon-reload`?** Nothing does today, so a unit
-  edit is written and silently has no effect, and the `restart_service` that follows
-  reports success while running the old unit. A `KINDS` entry for `/etc/systemd/**`
-  would fix it, with the unit name taken from the file name. Blocks the bad-`ExecStart`
-  scenario PLAN.md's Phase 5 Task 4 assumes is fixable.
+- ~~Should editing a systemd unit run `daemon-reload`?~~ — **fixed**, and it uncovered a
+  bigger question. `KINDS` now has an `/etc/systemd/**` entry that runs
+  `systemctl daemon-reload` before restarting the derived unit. But the path is
+  **inert on a host set up the way Dwara's own guide says to set one up**: the testbed
+  sudoers grants `cat`/`tee` for /etc/nginx and /etc/redis and nothing for /etc/systemd,
+  so the edit fails with `SUDO_PASSWORD_REQUIRED`. Verified against the lab.
+- **Should Dwara refuse `/etc/systemd/**` outright, as it refuses `/etc/ssh`?** Granting
+  the sudo to make unit edits work is not a small change: **a unit file is an arbitrary
+  command run as root, and `systemctl start *` is already on the allow-list**, so
+  `tee -- /etc/systemd/system/*` hands an untrusted model root by construction. The only
+  control left would be a human reading a diff carefully, which is exactly the kind of
+  guarantee CLAUDE.md says must live in code instead. `/etc/ssh` is in
+  `UNEDITABLE_PATHS` for the same class of reason. Either add `/etc/systemd/**` there and
+  delete the KINDS entry, or grant the sudo and accept that approval review is the
+  control. **This also means PLAN.md's bad-`ExecStart` fix scenario was wrong twice
+  over**, not once.
 - Final project name and npm scope. Packages are `@dwara/*` and private for now.
 - **How to pay for the full matrix.** 21 scenarios × 2 models × 2 modes = 84 runs. A
   Dwara-mode Sonnet run measures ~340k tokens (notional $0.40–$0.74, mean ~$0.52), so the

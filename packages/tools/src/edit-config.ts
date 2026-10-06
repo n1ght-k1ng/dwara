@@ -186,6 +186,23 @@ const KINDS: readonly FileKind[] = [
     // restart is what makes the service use it. Before this entry existed, an
     // edit here was written, nothing was reloaded, and the `restart_service` an
     // agent reached for next reported success while running the old unit.
+    //
+    // **This path is inert on a host set up the way Dwara's own guide says to set
+    // one up, and that is deliberate until someone decides otherwise.** The
+    // testbed's sudoers grants `cat`/`tee` for /etc/nginx and /etc/redis and
+    // nothing for /etc/systemd, so an edit here fails with
+    // SUDO_PASSWORD_REQUIRED. Granting it would not be a small change: a unit
+    // file *is* an arbitrary command run as root, and `systemctl start *` is
+    // already on the allow-list, so `tee -- /etc/systemd/system/*` hands the
+    // model root by construction. That is the same reason /etc/ssh is in
+    // UNEDITABLE_PATHS -- some files are too dangerous to edit even behind an
+    // approval, because the control would be a human reading a diff carefully
+    // rather than anything in code.
+    //
+    // The code is kept because it is correct and costs nothing: it fires only on
+    // a deployment that has chosen to grant the sudo. Whether Dwara should
+    // instead refuse /etc/systemd outright, as it refuses /etc/ssh, is recorded
+    // as an open question in docs/PROGRESS.md.
     match: /^\/etc\/systemd\//,
     prepare: { argv: ['systemctl', 'daemon-reload'], sudo: true, timeoutMs: WRITE_MS },
     derive: (path) => {
