@@ -132,8 +132,9 @@ review:
 - **`tee` into a unit directory plus permission to start units is full root.** A
   systemd unit file *is* an arbitrary command run as root. If you grant
   `tee -- /etc/systemd/system/*` and `systemctl start *`, you have granted
-  everything, however narrow each line looks on its own. The testbed does not
-  grant it, and whether Dwara should edit unit files at all is an open question.
+  everything, however narrow each line looks on its own. Do not grant it: Dwara
+  refuses to edit `/etc/systemd/**` in code for exactly this reason, so the rule
+  would buy you nothing and cost you the host.
 - **A trailing wildcard on `find` is a grant to run anything.** `find /var/log *`
   permits `find /var/log -exec rm -rf / {} +`, because `find` substitutes into an
   argument list the caller controls. Every `find` rule in the testbed is written

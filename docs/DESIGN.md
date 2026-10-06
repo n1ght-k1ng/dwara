@@ -435,6 +435,21 @@ not prove you can still log in, and a syntactically perfect `AllowUsers` line is
 is lost. Dwara reaches every host over SSH, so that failure takes the recovery path with it — the same
 reasoning that keeps `ssh` out of `restart_service`.
 
+2026-10-06 — **`edit_config` refuses `/etc/systemd/**` too.** Reason: a unit file **is** an arbitrary
+command run as root, and starting a unit is an ordinary permitted action — so allowing an edit there is
+equivalent to granting root to an untrusted model, with "a human read the diff carefully" as the only
+control. That is the kind of guarantee CLAUDE.md says must live in code rather than in attention, and it
+is the same reasoning as `/etc/ssh/**`: the blast radius is not bounded by the change, so an approval
+cannot be a meaningful gate.
+
+Reached the long way round. The Phase 5 benchmark found that editing a unit silently had no effect, since
+nothing ran `daemon-reload`; the fix added that, and reviewing the fix showed what making it *work* would
+require — `tee -- /etc/systemd/system/*` in the sudoers, which composes with the already-granted
+`systemctl start *` into full root. The capability was inert because the lab never granted the sudo, so
+the honest options were to grant it or to refuse the path. Refusing it; the `daemon-reload` machinery is
+removed rather than left as unreachable code. **Reading a unit file is still allowed** — a diagnosis needs
+it, and the right outcome is Dwara telling a person exactly which line to change.
+
 2026-09-29 — **A snapshot's `meta.json` is untrusted server output like anything else.** Reason:
 `dwara rollback` reads it to learn what to restore, so a hand-edited file could otherwise aim a restore
 at another snapshot's paths. It is parsed against a schema, the id it claims must match the id asked

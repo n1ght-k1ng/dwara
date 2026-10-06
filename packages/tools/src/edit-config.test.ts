@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Ctx, RawResult, RemoteCommand } from '@dwara/core';
+import { DwaraError } from '@dwara/core';
 import { UNEDITABLE_PATHS, editConfig } from './edit-config.js';
+import { DEFAULT_CONFIG_PATHS } from './paths.js';
 
 type FakeCtx = Ctx & { readonly calls: RemoteCommand[] };
 
@@ -288,109 +290,75 @@ describe('edit_config rollback', () => {
   });
 });
 
-describe('systemd units', () => {
+describe('systemd unit files cannot be edited', () => {
   const UNIT = '/etc/systemd/system/dwara-app.service';
-  const UNIT_BEFORE = [
-    '[Service]',
-    'ExecStart=/usr/bin/docker run --rm --name lab-app dwara-lab-app:dev',
-    'Restart=always',
-    '',
-  ].join('\n');
-  const UNIT_FIX = [
+  const DIFF = [
     '@@ -1,3 +1,3 @@',
     ' [Service]',
-    '-ExecStart=/usr/bin/docker run --rm --name lab-app dwara-lab-app:dev',
-    '+ExecStart=/usr/bin/docker run --rm --name lab-app dwara-lab-app:v2',
+    '-ExecStart=/usr/bin/true',
+    '+ExecStart=/usr/bin/false',
     ' Restart=always',
     '',
   ].join('\n');
 
-  it('reloads the systemd manager before restarting the unit', async () => {
-    // Without daemon-reload the restart starts the OLD unit and still exits
-    // zero, which is the whole reason this entry exists.
-    const ctx = ctxWith(() => ({}), UNIT_BEFORE);
-    const result = await planThenApply(ctx, { path: UNIT, diff: UNIT_FIX });
+  const paths = [
+    UNIT,
+    '/etc/systemd/system/dwara-app.service.d/override.conf',
+    '/etc/systemd/journald.conf',
+    '/etc/systemd/system.conf',
+    '/etc/systemd/user/thing.service',
+  ];
 
-    expect(result.prepare).toBe('systemctl daemon-reload');
-    expect(result.reload).toBe('systemctl restart dwara-app.service');
+  for (const path of paths) {
+    it(`refuses ${path}`, async () => {
+      // A unit file IS an arbitrary command run as root, and starting a unit is an
+      // ordinary permitted action -- so allowing an edit here would be equivalent
+      // to granting root, with "a person read the diff carefully" as the only
+      // control. CLAUDE.md is explicit that guarantees live in code.
+      const ctx = ctxWith(() => ({}));
 
-    const ran = ctx.calls.map((c) => c.argv.join(' '));
-    const reloadAt = ran.indexOf('systemctl daemon-reload');
-    const restartAt = ran.indexOf('systemctl restart dwara-app.service');
-    expect(reloadAt).toBeGreaterThan(-1);
-    expect(restartAt).toBeGreaterThan(reloadAt);
-    expect(result.reloaded).toBe(true);
-  });
+      await expect(
+        editConfig.apply({ host: 'lab-api', path, diff: DIFF, mode: 'plan' }, ctx),
+      ).rejects.toThrow(/will not edit/u);
 
-  it('snapshots the unit it is about to restart', () => {
-    expect(editConfig.snapshot?.({ host: 'h', path: UNIT, diff: UNIT_FIX, mode: 'apply' })).toEqual(
-      {
-        paths: [UNIT],
-        units: ['dwara-app.service'],
-      },
-    );
-  });
-
-  it('finds the unit behind a drop-in', async () => {
-    const ctx = ctxWith(() => ({}), UNIT_BEFORE);
-    const result = await planThenApply(ctx, {
-      path: '/etc/systemd/system/dwara-app.service.d/override.conf',
-      diff: UNIT_FIX,
+      // Nothing reached the host, not even the read.
+      expect(ctx.calls).toHaveLength(0);
     });
+  }
 
-    expect(result.reload).toBe('systemctl restart dwara-app.service');
+  it('explains why, rather than just refusing', async () => {
+    const ctx = ctxWith(() => ({}));
+    const error = await editConfig
+      .apply({ host: 'lab-api', path: UNIT, diff: DIFF, mode: 'plan' }, ctx)
+      .catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(DwaraError);
+    const hint = (error as DwaraError).hint ?? '';
+    expect(hint).toContain('arbitrary command run as root');
+    // The /etc/ssh reason must not be given for a systemd path.
+    expect(hint).not.toContain('sshd -t');
   });
 
-  it('maps a systemd daemon config to the daemon it configures', async () => {
-    const ctx = ctxWith(() => ({}), UNIT_BEFORE);
-    const result = await planThenApply(ctx, {
-      path: '/etc/systemd/journald.conf',
-      diff: UNIT_FIX,
-    });
+  it('still refuses /etc/ssh, with its own reason', async () => {
+    const ctx = ctxWith(() => ({}));
+    const error = await editConfig
+      .apply({ host: 'lab-api', path: '/etc/ssh/sshd_config', diff: DIFF, mode: 'plan' }, ctx)
+      .catch((cause: unknown) => cause);
 
-    expect(result.reload).toBe('systemctl restart systemd-journald.service');
+    expect((error as DwaraError).hint ?? '').toContain('sshd -t');
   });
 
-  it('reloads but restarts nothing for a path with no single unit', async () => {
-    // Re-execing the manager or restarting a target because a file changed is a
-    // much larger action than this tool should take by itself.
-    const ctx = ctxWith(() => ({}), UNIT_BEFORE);
-    const result = await planThenApply(ctx, { path: '/etc/systemd/system.conf', diff: UNIT_FIX });
-
-    expect(result.prepare).toBe('systemctl daemon-reload');
-    expect(result.reload).toBeUndefined();
-    expect(result.assessment).toContain('no service was reloaded');
+  it('snapshots nothing for a path it will not edit', () => {
+    expect(() =>
+      editConfig.snapshot?.({ host: 'h', path: UNIT, diff: DIFF, mode: 'apply' }),
+    ).toThrow(/will not edit/u);
   });
 
-  it('does not restart when daemon-reload fails, and says so', async () => {
-    const ctx = ctxWith(
-      (c) =>
-        c.argv.join(' ') === 'systemctl daemon-reload'
-          ? { exitCode: 1, stderr: 'Failed to reload daemon' }
-          : {},
-      UNIT_BEFORE,
-    );
-    const result = await planThenApply(ctx, { path: UNIT, diff: UNIT_FIX });
-
-    expect(result.reloaded).toBe(false);
-    expect(ctx.calls.map((c) => c.argv.join(' '))).not.toContain(
-      'systemctl restart dwara-app.service',
-    );
-    expect(result.error).toContain('daemon-reload');
-    expect(result.assessment).toContain('still running the old configuration');
-  });
-
-  it('still never reloads a file that failed its validator', async () => {
-    // The existing guarantee, re-checked now that another step sits in front of
-    // the reload.
-    const ctx = ctxWith((c) =>
-      c.argv[0] === 'nginx' ? { exitCode: 1, stderr: 'bad config' } : {},
-    );
-    const result = await planThenApply(ctx);
-
-    expect(result.validated).toBe(false);
-    expect(result.reloaded).toBe(false);
-    expect(ctx.calls.map((c) => c.argv.join(' '))).not.toContain('nginx -s reload');
+  it('leaves reading a unit file alone — a diagnosis needs it', () => {
+    // The refusal is about writing. read_config passes through a different guard,
+    // and /etc/systemd/** is still on its allow-list, so an agent can look at a
+    // unit and tell a human exactly which line to change.
+    expect(DEFAULT_CONFIG_PATHS).toContain('/etc/systemd/**');
   });
 });
 

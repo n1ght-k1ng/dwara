@@ -77,8 +77,6 @@ export interface EditConfigResult {
   readonly changes: { readonly added: number; readonly removed: number; readonly hunks: number };
   /** The command that will check the result, if this file type has one. */
   readonly validator?: string;
-  /** Run before `reload`, e.g. `systemctl daemon-reload`. */
-  readonly prepare?: string;
   /** How the change is made to take effect, if at all. */
   readonly reload?: string;
   /** Present on plan: what the file will contain. Redacted like any output. */
@@ -103,58 +101,32 @@ const WRITE_MS = 30_000;
  * Dwara reaches every host over SSH, so that failure takes the recovery path
  * with it — the same reasoning that keeps `ssh` out of `restart_service`.
  */
-export const UNEDITABLE_PATHS: readonly string[] = ['/etc/ssh/**'] as const;
+/**
+ * Files Dwara will not edit at any risk level, whatever a policy says.
+ *
+ * Both entries are here because **the blast radius is not bounded by the change**,
+ * so an approval would not be a meaningful control: a human reviewing the diff
+ * would have to spot the consequence rather than the edit.
+ *
+ * - `/etc/ssh/**` — `sshd -t` proves a file parses, not that anyone can still log
+ *   in, and Dwara reaches every host over SSH. One bad edit locks Dwara out of the
+ *   host it was trying to help.
+ * - `/etc/systemd/**` — a unit file **is** an arbitrary command run as root, and
+ *   starting a unit is an ordinary permitted action. Allowing an edit here is
+ *   therefore equivalent to granting root to an untrusted model, with "a person
+ *   read the diff carefully" as the only thing in the way. `CLAUDE.md` is explicit
+ *   that guarantees live in code rather than in prompts or in human attention.
+ *
+ * Reading them is still allowed. A diagnosis needs to see a unit file, and
+ * `read_config` passes through a different guard — the refusal is about writing.
+ */
+export const UNEDITABLE_PATHS: readonly string[] = ['/etc/ssh/**', '/etc/systemd/**'] as const;
 
 interface FileKind {
   readonly match: RegExp;
   readonly unit?: string;
   readonly validator?: RemoteCommand;
-  /**
-   * Run before `reload`. Exists for systemd, where a unit file on disk means
-   * nothing until `daemon-reload` has been run -- without it the restart that
-   * follows succeeds while the service keeps running the *old* unit, which is
-   * the difference between "the command exited zero" and "the change worked".
-   */
-  readonly prepare?: RemoteCommand;
   readonly reload?: RemoteCommand;
-  /**
-   * For files whose unit and reload depend on the path. A unit file names its own
-   * service, so it cannot be a constant in the table below.
-   */
-  readonly derive?: (path: string) => {
-    unit?: string;
-    prepare?: RemoteCommand;
-    reload?: RemoteCommand;
-  };
-}
-
-/**
- * The unit a path under /etc/systemd belongs to, when there is one.
- *
- * `/etc/systemd/system/foo.service`            -> foo.service
- * `/etc/systemd/system/foo.service.d/override.conf` -> foo.service (a drop-in)
- * `/etc/systemd/journald.conf`                 -> systemd-journald.service
- *
- * Anything else -- `system.conf`, a target's `.wants` directory -- yields no
- * unit, and the edit then gets `daemon-reload` and nothing restarted. Restarting
- * a target or re-execing the manager because someone edited a file is a much
- * larger action than this tool should take on its own.
- */
-function systemdUnitFor(path: string): string | undefined {
-  const dropIn =
-    /^\/etc\/systemd\/system\/([A-Za-z0-9@._-]+\.(?:service|socket|timer|path|mount))\.d\//.exec(
-      path,
-    );
-  if (dropIn?.[1] !== undefined) return dropIn[1];
-
-  const unit =
-    /^\/etc\/systemd\/system\/([A-Za-z0-9@._-]+\.(?:service|socket|timer|path|mount))$/.exec(path);
-  if (unit?.[1] !== undefined) return unit[1];
-
-  const daemonConf = /^\/etc\/systemd\/(journald|resolved|logind|timesyncd)\.conf$/.exec(path);
-  if (daemonConf?.[1] !== undefined) return `systemd-${daemonConf[1]}.service`;
-
-  return undefined;
 }
 
 /**
@@ -179,41 +151,6 @@ const KINDS: readonly FileKind[] = [
     // Redis ships no config checker, so the postcondition is the service
     // itself: restart, then require it to stay up.
     reload: { argv: ['systemctl', 'restart', 'redis-server'], sudo: true, timeoutMs: WRITE_MS },
-  },
-  {
-    // systemd. Editing a unit file and stopping there changes nothing a running
-    // service can see: `daemon-reload` is what makes systemd re-read it, and a
-    // restart is what makes the service use it. Before this entry existed, an
-    // edit here was written, nothing was reloaded, and the `restart_service` an
-    // agent reached for next reported success while running the old unit.
-    //
-    // **This path is inert on a host set up the way Dwara's own guide says to set
-    // one up, and that is deliberate until someone decides otherwise.** The
-    // testbed's sudoers grants `cat`/`tee` for /etc/nginx and /etc/redis and
-    // nothing for /etc/systemd, so an edit here fails with
-    // SUDO_PASSWORD_REQUIRED. Granting it would not be a small change: a unit
-    // file *is* an arbitrary command run as root, and `systemctl start *` is
-    // already on the allow-list, so `tee -- /etc/systemd/system/*` hands the
-    // model root by construction. That is the same reason /etc/ssh is in
-    // UNEDITABLE_PATHS -- some files are too dangerous to edit even behind an
-    // approval, because the control would be a human reading a diff carefully
-    // rather than anything in code.
-    //
-    // The code is kept because it is correct and costs nothing: it fires only on
-    // a deployment that has chosen to grant the sudo. Whether Dwara should
-    // instead refuse /etc/systemd outright, as it refuses /etc/ssh, is recorded
-    // as an open question in docs/PROGRESS.md.
-    match: /^\/etc\/systemd\//,
-    prepare: { argv: ['systemctl', 'daemon-reload'], sudo: true, timeoutMs: WRITE_MS },
-    derive: (path) => {
-      const unit = systemdUnitFor(path);
-      return unit === undefined
-        ? {}
-        : {
-            unit,
-            reload: { argv: ['systemctl', 'restart', unit], sudo: true, timeoutMs: WRITE_MS },
-          };
-    },
   },
 ];
 
@@ -265,12 +202,12 @@ export function createEditConfig(
       'reloaded again.',
       '',
       'nginx is checked with nginx -t. Redis has no config checker, so it is restarted',
-      'and required to stay up. A systemd unit file gets systemctl daemon-reload and',
-      'then a restart of that unit, because a unit file on disk means nothing until',
-      'systemd has re-read it — editing one and restarting without the reload starts',
-      'the old unit and still reports success. Files under /etc/ssh cannot be edited at',
-      'all: sshd -t proves a file parses, not that you can still log in, and Dwara',
-      'reaches every host over SSH.',
+      'and required to stay up.',
+      '',
+      'Two places cannot be edited at all, and no policy changes that. /etc/ssh:',
+      'sshd -t proves a file parses, not that you can still log in, and Dwara reaches',
+      'every host over SSH. /etc/systemd: a unit file is an arbitrary command run as',
+      'root, so editing one is equivalent to granting root. You can still read both.',
     ].join('\n'),
     input,
 
@@ -328,28 +265,10 @@ export function createEditConfig(
       const reloadable =
         written.exitCode === 0 && (kind?.validator === undefined || validated.exitCode === 0);
 
-      // `prepare` runs first and is required to succeed: for systemd it is
-      // `daemon-reload`, and restarting a unit systemd has not re-read would
-      // start the old one while reporting success.
-      const prepared =
-        reloadable && kind?.prepare !== undefined ? await ctx.run(kind.prepare) : noop('');
-      const preparedOk = kind?.prepare === undefined || prepared.exitCode === 0;
-
       const reloaded =
-        reloadable && preparedOk && kind?.reload !== undefined
-          ? await ctx.run(kind.reload)
-          : noop('');
+        reloadable && kind?.reload !== undefined ? await ctx.run(kind.reload) : noop('');
 
-      return [
-        current,
-        noop(hash),
-        noop(after),
-        noop(params.diff),
-        written,
-        validated,
-        prepared,
-        reloaded,
-      ];
+      return [current, noop(hash), noop(after), noop(params.diff), written, validated, reloaded];
     },
 
     parse: (raws) => {
@@ -368,7 +287,6 @@ export function createEditConfig(
         planHash,
         changes: { added: 0, removed: 0, hunks: 0 },
         ...(kind?.validator === undefined ? {} : { validator: kind.validator.argv.join(' ') }),
-        ...(kind?.prepare === undefined ? {} : { prepare: kind.prepare.argv.join(' ') }),
         ...(kind?.reload === undefined ? {} : { reload: kind.reload.argv.join(' ') }),
       };
 
@@ -384,12 +302,9 @@ export function createEditConfig(
 
       const written = at(raws, 4);
       const validated = at(raws, 5);
-      const prepared = at(raws, 6);
-      const reloaded = at(raws, 7);
+      const reloaded = at(raws, 6);
       const validatorRan = kind?.validator !== undefined;
       const validatorOk = !validatorRan || validated.exitCode === 0;
-      const didPrepare = kind?.prepare !== undefined && prepared.argv.length > 0;
-      const prepareOk = !didPrepare || prepared.exitCode === 0;
       const didReload = kind?.reload !== undefined && reloaded.argv.length > 0;
 
       return {
@@ -405,20 +320,10 @@ export function createEditConfig(
             ? {
                 error: `${kind?.validator?.argv.join(' ') ?? 'validator'}: ${firstLine(validated)}`,
               }
-            : !prepareOk
-              ? { error: `${kind?.prepare?.argv.join(' ') ?? 'prepare'}: ${firstLine(prepared)}` }
-              : didReload && reloaded.exitCode !== 0
-                ? { error: `reload failed: ${firstLine(reloaded)}` }
-                : {}),
-        assessment: applyAssessment(
-          written,
-          validatorRan,
-          validatorOk,
-          prepareOk,
-          didReload,
-          reloaded,
-          kind,
-        ),
+            : didReload && reloaded.exitCode !== 0
+              ? { error: `reload failed: ${firstLine(reloaded)}` }
+              : {}),
+        assessment: applyAssessment(written, validatorRan, validatorOk, didReload, reloaded, kind),
       };
     },
 
@@ -471,18 +376,15 @@ function noop(stdout: string): RawResult {
 }
 
 function kindFor(path: string): FileKind | undefined {
-  const kind = KINDS.find((candidate) => candidate.match.test(path));
-  if (kind?.derive === undefined) return kind;
+  return KINDS.find((candidate) => candidate.match.test(path));
+}
 
-  // Only keys the deriver actually produced are merged, so an absent `unit` does
-  // not overwrite a constant one with undefined.
-  const derived = kind.derive(path);
-  return {
-    ...kind,
-    ...(derived.unit === undefined ? {} : { unit: derived.unit }),
-    ...(derived.prepare === undefined ? {} : { prepare: derived.prepare }),
-    ...(derived.reload === undefined ? {} : { reload: derived.reload }),
-  };
+/** Why a path is on the uneditable list, so a refusal explains itself. */
+function uneditableReason(path: string): string {
+  if (path.startsWith('/etc/systemd/')) {
+    return 'a systemd unit file is an arbitrary command run as root, and starting a unit is an ordinary permitted action — so editing one is equivalent to granting root. Change it yourself, or use a tool whose effect is bounded by what it says it does';
+  }
+  return 'sshd -t proves the file parses, not that you can still log in, and Dwara reaches this host over SSH';
 }
 
 function sha256(text: string): string {
@@ -514,7 +416,7 @@ function guardEditPath(requested: string): string {
   ) {
     throw new DwaraError('UNSAFE_ARGUMENT', `Dwara will not edit ${guard.path}`, {
       details: { path: guard.path, uneditable: [...UNEDITABLE_PATHS] },
-      hint: 'sshd -t proves the file parses, not that you can still log in, and Dwara reaches this host over SSH',
+      hint: uneditableReason(guard.path),
     });
   }
 
@@ -549,7 +451,6 @@ function applyAssessment(
   written: RawResult,
   validatorRan: boolean,
   validatorOk: boolean,
-  prepareOk: boolean,
   didReload: boolean,
   reloaded: RawResult,
   kind: FileKind | undefined,
@@ -557,9 +458,6 @@ function applyAssessment(
   if (written.exitCode !== 0) return 'the file could not be written; nothing changed';
   if (validatorRan && !validatorOk) {
     return 'the new config failed its validator, so the service was NOT reloaded and is still running the old one';
-  }
-  if (!prepareOk) {
-    return `${kind?.prepare?.argv.join(' ') ?? 'the preparatory step'} failed, so nothing was reloaded and the service is still running the old configuration`;
   }
   if (didReload && reloaded.exitCode !== 0) return 'written and valid, but the reload failed';
   if (didReload) return `written, validated and ${kind?.unit ?? 'the service'} reloaded`;

@@ -258,12 +258,13 @@ that claim checkable rather than asserted.
 | 3 | **Redactor leaked a YAML block scalar.** `password: \|` with the value on the next line was returned in full. `read_config` on any config keeping a credential that way handed it over | high | Phase 6 red team | **Fixed** — rule covering `\|`, `>`, strip and indent forms. `redteam.test.ts` |
 | 4 | **Editing a systemd unit had no effect.** No `daemon-reload` anywhere, so the file was written, nothing reloaded, and the following `restart_service` reported success while running the old unit | medium | Phase 5 benchmark | **Fixed** — `prepare` step, unit derived from the path. `edit-config.test.ts` |
 | 5 | **A plan required its own approval.** `mode: "plan"` writes nothing, but policy judged it as `config`, so a human approved a dry run before they could see what they were approving — and planning took a snapshot, a write to describe a dry run | medium | Phase 5 benchmark | **Fixed** — `effectiveRisk`, which may only lower a class and fails closed. `pipeline.test.ts` |
-| 6 | **`tee` into a unit directory plus `systemctl start *` is full root.** A unit file is an arbitrary root command, so two individually narrow sudoers rules compose into everything | medium | Phase 6 review of finding 4 | **Open, not exposed.** The sudo is deliberately not granted, so the capability is inert. The decision — refuse `/etc/systemd/**` as `/etc/ssh` is refused, or grant it and accept approval review as the control — is in `docs/PROGRESS.md` |
+| 6 | **`tee` into a unit directory plus `systemctl start *` is full root.** A unit file is an arbitrary root command, so two individually narrow sudoers rules compose into everything | medium | Phase 6 review of finding 4 | **Fixed** — `/etc/systemd/**` added to `UNEDITABLE_PATHS`; the capability is refused in code rather than left to an approval. `edit-config.test.ts` |
 | 7 | **A trailing wildcard on a `find` sudoers rule grants arbitrary execution.** `find /var/log *` permits `find /var/log -exec rm -rf / {} +` | medium | Phase 3 sudoers design | **Fixed** — every `find` rule written out in full, wildcards only where `find` reads them as a basename pattern or an mtime |
 | 8 | **Baseline mode reported a safety zero it could not know.** Every safety metric is read from the audit log; baseline has no Dwara and so no log, an empty chain verifies, and a run that destroyed a database would score zero unsafe attempts and pass | medium | Phase 6 code review | **Fixed** — `safetyMeasured: false`, reported as `n/a`. Baseline numbers remain unpublishable for the reasons in `BENCHMARK.md` |
 
-**No open high-severity findings.** Finding 6 is the only open item and is a design
-decision about a capability that is currently inert; nothing is exposed by it today.
+**No open findings at all.** Finding 6 was the last one open, and the decision went
+the conservative way: `/etc/systemd/**` is refused in code, and the `daemon-reload`
+machinery written to support editing it was removed rather than left unreachable.
 
 Two findings are worth noting for *where they came from*. Finding 2 was introduced
 that same morning by a one-flag change made to fix something else — widening what a

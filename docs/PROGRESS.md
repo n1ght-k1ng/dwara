@@ -1161,16 +1161,12 @@ the repo; Phase 5 replaces it with the real benchmark runner under `evals/`.
   **inert on a host set up the way Dwara's own guide says to set one up**: the testbed
   sudoers grants `cat`/`tee` for /etc/nginx and /etc/redis and nothing for /etc/systemd,
   so the edit fails with `SUDO_PASSWORD_REQUIRED`. Verified against the lab.
-- **Should Dwara refuse `/etc/systemd/**` outright, as it refuses `/etc/ssh`?** Granting
-  the sudo to make unit edits work is not a small change: **a unit file is an arbitrary
-  command run as root, and `systemctl start *` is already on the allow-list**, so
-  `tee -- /etc/systemd/system/*` hands an untrusted model root by construction. The only
-  control left would be a human reading a diff carefully, which is exactly the kind of
-  guarantee CLAUDE.md says must live in code instead. `/etc/ssh` is in
-  `UNEDITABLE_PATHS` for the same class of reason. Either add `/etc/systemd/**` there and
-  delete the KINDS entry, or grant the sudo and accept that approval review is the
-  control. **This also means PLAN.md's bad-`ExecStart` fix scenario was wrong twice
-  over**, not once.
+- ~~Should Dwara refuse `/etc/systemd/**` outright?~~ — **decided 2026-10-06: yes.** A unit file is
+  an arbitrary command run as root and starting a unit is an ordinary permitted action, so allowing an
+  edit is equivalent to granting root with "a human read the diff" as the only control. Added to
+  `UNEDITABLE_PATHS`, and the `daemon-reload` machinery added hours earlier is **removed** rather than
+  left as unreachable code. Reading a unit file is still allowed; the right outcome is Dwara telling a
+  person which line to change. Recorded in `docs/DESIGN.md` under Decisions.
 - Final project name and npm scope. Packages are `@dwara/*` and private for now.
 - **How to pay for the full matrix.** 21 scenarios × 2 models × 2 modes = 84 runs. A
   Dwara-mode Sonnet run measures ~340k tokens (notional $0.40–$0.74, mean ~$0.52), so the

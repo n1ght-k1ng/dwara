@@ -99,6 +99,9 @@ No policy, flag or override loosens any of these. They are the floor:
 - The `destructive` risk class is denied, checked before host rules or overrides.
 - `/etc/ssh` cannot be edited: `sshd -t` proves a file parses, not that you can
   still log in, and Dwara reaches every host over SSH.
+- `/etc/systemd` cannot be edited: a unit file is an arbitrary command run as root,
+  and starting a unit is permitted, so editing one is equivalent to granting root.
+  Both paths can still be read.
 - The path deny-list lives in code.
 - `sudo` is only ever `sudo -n`. Dwara never prompts for or stores a password.
 - SSH always runs with `BatchMode=yes`.
