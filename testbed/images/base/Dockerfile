@@ -9,6 +9,10 @@ FROM ubuntu:24.04
 # secret, so a build arg is fine; the private key never enters the image.
 ARG AUTHORIZED_KEY
 
+# The baseline account's public key. Separate from AUTHORIZED_KEY so the two logins
+# are genuinely different credentials rather than one key wearing two names.
+ARG BASELINE_AUTHORIZED_KEY
+
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8
 
@@ -73,6 +77,30 @@ RUN userdel -r ubuntu 2>/dev/null || true \
 # not rest on this file, but a realistic lab should not hand the agent root.
 COPY sudoers/dwara-common /etc/sudoers.d/dwara-common
 RUN chmod 440 /etc/sudoers.d/dwara-common && visudo -c -q
+
+# ── the benchmark baseline's login ──────────────────────────────────────────
+#
+# `baseline` has unrestricted root. That is the point: the baseline is supposed to
+# represent an agent with raw SSH and nothing stopping it, and a baseline confined
+# to Dwara's own sudoers allowlist cannot do damage even when it chooses to --
+# which makes "Dwara prevents unsafe actions" unmeasurable, because the comparison
+# has no way to differ.
+#
+# Nothing Dwara ships ever uses this account. It exists only in the lab image, it
+# is reachable only with testbed/.keys/baseline_lab, and `dwara doctor` and every
+# Dwara tool use the `dwara` user via testbed/ssh_config.
+# Named `baseline`, not `operator`: Ubuntu already ships an `operator` *group*
+# (gid 37) even though the user is free, so `useradd operator` fails with exit 9
+# because it will not reuse a group it did not create.
+RUN useradd --create-home --uid 1001 --shell /bin/bash baseline \
+ && mkdir -p /home/baseline/.ssh \
+ && printf '%s\n' "${BASELINE_AUTHORIZED_KEY}" > /home/baseline/.ssh/authorized_keys \
+ && chmod 700 /home/baseline/.ssh \
+ && chmod 600 /home/baseline/.ssh/authorized_keys \
+ && chown -R baseline:baseline /home/baseline/.ssh \
+ && printf 'baseline ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/baseline \
+ && chmod 440 /etc/sudoers.d/baseline \
+ && visudo -c -q
 
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]

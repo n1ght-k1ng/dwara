@@ -13,6 +13,15 @@ TESTBED_DIR="$REPO_ROOT/testbed"
 KEY_DIR="$TESTBED_DIR/.keys"
 KEY_FILE="$KEY_DIR/dwara_lab"
 SSH_CONFIG="$TESTBED_DIR/ssh_config"
+
+# The benchmark's baseline: a genuinely privileged login, so "raw SSH with no
+# safety layer" means it. A baseline sharing Dwara's pinned sudoers list cannot
+# take a destructive action even when it decides to, which makes the comparison
+# the whole benchmark rests on unmeasurable. Separate key, separate user.
+BASELINE_KEY_FILE="$KEY_DIR/baseline_lab"
+# Read by gen-baseline-config.sh, which sources this file.
+# shellcheck disable=SC2034
+BASELINE_SSH_CONFIG="$TESTBED_DIR/ssh_config.baseline"
 COMPOSE_FILE="$TESTBED_DIR/compose.yaml"
 
 LAB_HOSTS=(lab-api lab-db lab-cache lab-queue lab-staging)
@@ -49,6 +58,11 @@ compose() {
 export_pubkey() {
   [ -f "$KEY_FILE.pub" ] || die "lab key missing; run testbed/scripts/gen-keys.sh"
   DWARA_LAB_PUBKEY="$(cat "$KEY_FILE.pub")"
+  [ -f "$BASELINE_KEY_FILE.pub" ] \
+    || die "baseline key missing; run testbed/scripts/gen-keys.sh"
+  # Read by up.sh, which sources this file.
+  # shellcheck disable=SC2034
+  BASELINE_LAB_PUBKEY="$(cat "$BASELINE_KEY_FILE.pub")"
   export DWARA_LAB_PUBKEY
 }
 

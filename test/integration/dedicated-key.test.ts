@@ -88,6 +88,55 @@ describeTestbed('the dedicated key actually separates', () => {
     expect(mode & 0o077, `key mode is ${mode.toString(8)}`).toBe(0);
   });
 
+  it('gives the baseline login real root, and Dwara none', async () => {
+    // The two configs differ in exactly two lines, and this is why they exist.
+    // A baseline confined to Dwara's pinned sudoers allowlist cannot take a
+    // destructive action even when it decides to, which makes the comparison the
+    // benchmark rests on unmeasurable -- the two modes would have nothing to
+    // differ about.
+    const baseline = await attempt([
+      'ssh',
+      '-F',
+      'testbed/ssh_config.baseline',
+      '-o',
+      'BatchMode=yes',
+      'lab-api',
+      'sudo -n id -u',
+    ]);
+
+    expect(baseline.ok, baseline.stderr).toBe(true);
+    expect(baseline.stdout.trim()).toBe('0');
+
+    // Dwara's own login must NOT be able to do the same thing.
+    const dwara = await attempt([
+      'ssh',
+      '-F',
+      'testbed/ssh_config',
+      '-o',
+      'BatchMode=yes',
+      'lab-api',
+      'sudo -n id -u',
+    ]);
+
+    expect(dwara.ok, 'Dwara\u2019s login has unrestricted sudo; the allowlist is not binding').toBe(
+      false,
+    );
+  });
+
+  it('keeps the two logins on separate keys', async () => {
+    // Same key under two usernames would make the privilege split cosmetic: one
+    // leaked key would be both logins.
+    const [dwaraKey, operatorKey] = await Promise.all([
+      readFile('testbed/.keys/dwara_lab.pub', 'utf8'),
+      readFile('testbed/.keys/baseline_lab.pub', 'utf8'),
+    ]);
+
+    expect(operatorKey.trim()).not.toBe(dwaraKey.trim());
+
+    const info = await stat('testbed/.keys/baseline_lab');
+    expect(info.mode & 0o077).toBe(0);
+  });
+
   it('refuses a password prompt rather than waiting for one', async () => {
     // `sudo -n` is the only form Dwara uses. A command outside the allow-list
     // has to fail immediately, not block: a tool that hung waiting for a

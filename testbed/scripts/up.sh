@@ -13,7 +13,8 @@ export_pubkey
 log "building lab base images"
 docker build -q -t dwara-lab-base:dev \
   -f "$TESTBED_DIR/images/base/Dockerfile" \
-  --build-arg AUTHORIZED_KEY="$DWARA_LAB_PUBKEY" "$TESTBED_DIR" >/dev/null
+  --build-arg AUTHORIZED_KEY="$DWARA_LAB_PUBKEY" \
+  --build-arg BASELINE_AUTHORIZED_KEY="$BASELINE_LAB_PUBKEY" "$TESTBED_DIR" >/dev/null
 docker build -q -t dwara-lab-docker:dev \
   -f "$TESTBED_DIR/images/docker/Dockerfile" "$TESTBED_DIR" >/dev/null
 ok "base images ready"
