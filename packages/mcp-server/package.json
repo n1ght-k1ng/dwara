@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "MCP stdio adapter over Dwara core",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-or-later",
   "engines": {
     "node": ">=20"
   },

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Dwara tool definitions (one file per tool)",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-or-later",
   "engines": {
     "node": ">=20"
   },

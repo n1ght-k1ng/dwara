@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Dwara PreToolUse hook: blocks raw SSH to managed hosts",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-or-later",
   "engines": {
     "node": ">=20"
   },

@@ -435,6 +435,23 @@ not prove you can still log in, and a syntactically perfect `AllowUsers` line is
 is lost. Dwara reaches every host over SSH, so that failure takes the recovery path with it — the same
 reasoning that keeps `ssh` out of `restart_service`.
 
+2026-10-07 — **AGPL-3.0-or-later, plus a contributor licence agreement.** Reason: Apache-2.0 was a
+default rather than a choice. The realistic commercial risk to this project is not someone reselling
+hosted Dwara -- there is nothing to host, it is a local CLI -- but a vendor **embedding** the policy
+engine in their own agent platform and owing nothing. AGPL turns that into a conversation; its network
+clause costs almost nothing in adoption for a tool that runs on the operator's machine, because it
+mainly binds the people who would redistribute it.
+
+The CLA is the part with a deadline. With zero external contributors the project can still choose to
+offer a second, commercial licence later; after the first outside pull request that option is gone
+unless every contributor can be found and asked. Done now because it cannot be done later, not because
+a commercial licence is planned. Contributors keep their copyright -- it is a licence grant, not an
+assignment.
+
+Safety features are explicitly **not** the thing a commercial licence buys. The project's claim is that
+guarantees live in code; a paid tier containing approvals, the audit log or the hook would make that
+claim false, and the benchmark would be measuring a product most users do not have.
+
 2026-10-06 — **`edit_config` refuses `/etc/systemd/**` too.** Reason: a unit file **is** an arbitrary
 command run as root, and starting a unit is an ordinary permitted action — so allowing an edit there is
 equivalent to granting root to an untrusted model, with "a human read the diff carefully" as the only

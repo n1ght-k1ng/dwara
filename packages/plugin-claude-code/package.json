@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Claude Code plugin: slash commands, investigation skill, hooks.json, permission settings",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0-or-later",
   "files": [
     "commands",
     "skills",

@@ -147,4 +147,11 @@ reimplementing SSH, Vitest, Docker Compose for the lab.
 
 ## Licence
 
-Apache-2.0.
+**AGPL-3.0-or-later.** You can read, run, modify and self-host Dwara freely. If you
+build it into something you distribute or offer over a network, that work has to be
+open too.
+
+If your organisation cannot accept the AGPL, a separate commercial licence is
+possible — that is why [`CLA.md`](CLA.md) exists. Contributions are welcome;
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the checks and the rules that are not
+negotiable.
