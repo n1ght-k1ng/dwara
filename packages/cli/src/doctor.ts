@@ -3,9 +3,12 @@ import {
   SshTransport,
   loadPolicy,
   parseSshConfig,
+  resolveHost,
   selectHostRules,
   type Policy,
+  type SshConfig,
 } from '@dwara/core';
+import { preflightSsm, ssmTarget, usesSsm } from './ssm.js';
 
 /**
  * What Dwara's read-only tools need on a host.
@@ -92,7 +95,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
     // A host the policy does not cover is listed but not probed: connecting to
     // something Dwara is not allowed to manage would be the wrong thing to do.
     const checks = managed
-      ? await checkHost(transport, host, options.timeoutMs ?? 15_000)
+      ? await checkManagedHost(config, transport, host, options.timeoutMs ?? 15_000)
       : [
           {
             name: 'policy',
@@ -111,6 +114,42 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
     hosts,
     ok: hosts.every((report) => report.status !== 'fail'),
   };
+}
+
+/**
+ * Probes a managed host, preflighting the proxy first where there is one.
+ *
+ * Order matters. A host reached through SSM fails with the same SSH timeout
+ * whatever is actually wrong -- a missing plugin, stale credentials, an offline
+ * agent -- so the local checks run *before* the connection is attempted. That
+ * turns a fifteen-second wait and "connection closed" into a named cause, and it
+ * costs nothing on the hosts that are fine.
+ */
+async function checkManagedHost(
+  config: SshConfig,
+  transport: SshTransport,
+  host: string,
+  timeoutMs: number,
+): Promise<Check[]> {
+  const resolved = resolveHost(config, host);
+  if (!usesSsm(resolved)) return checkHost(transport, host, timeoutMs);
+
+  const preflight = await preflightSsm(ssmTarget(resolved), timeoutMs);
+
+  // A broken proxy means the connection cannot work, so there is nothing to
+  // learn from trying. Saying so beats a second failure that repeats the first.
+  if (preflight.some((check) => check.status === 'fail')) {
+    return [
+      ...preflight,
+      {
+        name: 'connect',
+        status: 'fail',
+        detail: 'not attempted: the SSM proxy cannot work until the above is fixed',
+      },
+    ];
+  }
+
+  return [...preflight, ...(await checkHost(transport, host, timeoutMs))];
 }
 
 async function checkHost(

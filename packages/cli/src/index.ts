@@ -16,6 +16,16 @@ export const PACKAGE_NAME = '@dwara/cli' as const;
 export const VERSION = '0.0.0' as const;
 
 export { runDoctor, formatReport } from './doctor.js';
+export {
+  BLOCK_END,
+  BLOCK_START,
+  preflightSsm,
+  spliceSsmBlock,
+  ssmSshConfig,
+  ssmTarget,
+  usesSsm,
+} from './ssm.js';
+export type { SsmConfigOptions, SsmHost } from './ssm.js';
 export type { DoctorReport, DoctorOptions, HostReport, Check } from './doctor.js';
 export { approve, formatRequest, listPending } from './approve.js';
 export { hostForSnapshot, listHostSnapshots, rollback } from './rollback.js';

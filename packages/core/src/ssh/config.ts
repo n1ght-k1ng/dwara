@@ -33,9 +33,26 @@ export interface ResolvedHost {
   readonly user: string | undefined;
   readonly identityFile: string | undefined;
   readonly proxyJump: string | undefined;
+  /**
+   * The `ProxyCommand`, verbatim.
+   *
+   * Surfaced because a host reached through one fails in ways that look nothing
+   * like an SSH problem: a missing helper binary, expired cloud credentials or an
+   * offline agent on the far side all arrive as a timeout. `dwara doctor` reads
+   * this to tell the difference, and the transport needs no knowledge of it --
+   * `ssh -F` honours it on its own.
+   */
+  readonly proxyCommand: string | undefined;
 }
 
-const INTERESTING = new Set(['hostname', 'port', 'user', 'identityfile', 'proxyjump']);
+const INTERESTING = new Set([
+  'hostname',
+  'port',
+  'user',
+  'identityfile',
+  'proxyjump',
+  'proxycommand',
+]);
 
 function expandTilde(path: string): string {
   return path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : path;
@@ -217,6 +234,7 @@ export function resolveHost(config: SshConfig, host: string): ResolvedHost {
     user: settings['user'],
     identityFile: settings['identityfile'],
     proxyJump: settings['proxyjump'],
+    proxyCommand: settings['proxycommand'],
   };
 }
 
