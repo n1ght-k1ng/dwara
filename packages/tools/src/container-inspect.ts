@@ -32,7 +32,10 @@ export interface ContainerDetail {
   readonly networkMode: string;
   readonly ports: readonly string[];
   readonly mounts: readonly string[];
-  /** Environment as `KEY=value`. Values pass through the redactor. */
+  /**
+   * Environment as `KEY=value`, with **every value withheld** unless its key is
+   * on a short operational allow-list. See `SHOWABLE_ENV`.
+   */
   readonly env: readonly string[];
   readonly assessment: string;
   readonly error?: string;
@@ -60,9 +63,15 @@ export const containerInspect: BuiltToolDef<Input, ContainerDetail> = {
     'Exit code 137 is SIGKILL (often OOM), 139 is a segfault, 1 is usually the application',
     'exiting on its own error.',
     '',
-    '`env` often explains a connection failure: the host, port or database name a service',
-    'was given may simply be wrong. Credentials in it are redacted, but the host and',
-    'database remain visible, which is the diagnostically useful part.',
+    '`env` often explains a connection failure: a service may simply have been given',
+    'the wrong settings. **Values are withheld.** You get each variable name and',
+    'whether it is set or empty -- which answers "is this configured at all" -- but not',
+    'the value, because on a container orchestrator the environment is where injected',
+    'secrets live, and that includes the host and database names next to them.',
+    '',
+    'A few operational keys are shown in full: PORT, NODE_ENV, LOG_LEVEL and similar.',
+    'If a withheld value is genuinely blocking you, name the variable, say what you',
+    'would do with it, and ask the person to read it for you. Do not guess at it.',
   ].join('\n'),
   input,
 
@@ -127,13 +136,80 @@ export const containerInspect: BuiltToolDef<Input, ContainerDetail> = {
         const m = record(mount);
         return `${string(m['Source']) || string(m['Name'])} -> ${string(m['Destination'])}`;
       }),
-      env: Array.isArray(config['Env']) ? config['Env'].map((value) => String(value)) : [],
+      env: Array.isArray(config['Env'])
+        ? config['Env'].map((value) => redactEnv(String(value)))
+        : [],
       assessment: '',
     };
 
     return { ...detail, assessment: assess(detail) };
   },
 };
+
+/**
+ * Environment keys whose values may be shown.
+ *
+ * Everything else is withheld, which is the opposite of how the redactor works
+ * elsewhere in this repo -- and deliberately so. On a container orchestrator the
+ * environment **is** the credential store: ECS injects Secrets Manager values
+ * straight into `Config.Env`, and `docker inspect` prints them in plain text. A
+ * reviewer looking at a real UAT cluster found Razorpay keys, AWS access keys,
+ * messaging tokens and a database URI for a host shared with production, all
+ * sitting in the environment of ordinary containers.
+ *
+ * Pattern matching is the wrong tool for that. Measured against those exact
+ * shapes, the redactor caught every secret whose key name contained KEY, SECRET,
+ * TOKEN, URI or PASSWORD, and every value with a known vendor prefix -- and
+ * missed `RZP=rzp_live_...`, because the name says nothing and `rzp_` was not a
+ * pattern it knew. Adding `rzp_` would fix that one case and leave the next
+ * vendor open. A deny-list of secret shapes can only ever be as current as its
+ * last update; an allow-list of *operational* keys is small, stable, and fails
+ * closed for everything it has never heard of.
+ *
+ * The list is kept to what a diagnosis genuinely reads. `PORT` is here because a
+ * benchmark run used it to prove an application was listening on 3000 while nginx
+ * proxied to 3999 -- that is the shape of thing this tool exists for. A value not
+ * on this list is still *reported as set*, which answers most questions on its
+ * own; for the rest, a person can look.
+ */
+const SHOWABLE_ENV: readonly string[] = [
+  'PORT',
+  'NODE_ENV',
+  'ENVIRONMENT',
+  'ENV',
+  'STAGE',
+  'LOG_LEVEL',
+  'TZ',
+  'LANG',
+  'HOSTNAME',
+  'HOME',
+  'PWD',
+  'SHELL',
+  'TERM',
+  'PATH',
+  'NODE_VERSION',
+  'PYTHON_VERSION',
+];
+
+/**
+ * Withholds an environment value unless its key is operational.
+ *
+ * Reports whether the variable is set and whether it is empty, because "the
+ * variable is missing" and "the variable is set to the wrong thing" are different
+ * diagnoses and the first is answerable without the value.
+ */
+function redactEnv(entry: string): string {
+  const split = entry.indexOf('=');
+  if (split < 0) return entry;
+
+  const key = entry.slice(0, split);
+  const value = entry.slice(split + 1);
+
+  if (SHOWABLE_ENV.includes(key.toUpperCase())) return entry;
+  if (value === '') return `${key}=`;
+
+  return `${key}=[REDACTED:env-value]`;
+}
 
 function assess(detail: ContainerDetail): string {
   if (detail.state.oomKilled) {

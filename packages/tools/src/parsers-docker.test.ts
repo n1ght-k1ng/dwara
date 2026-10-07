@@ -267,6 +267,96 @@ describe('container_inspect', () => {
   });
 });
 
+describe('container_inspect withholds environment values', () => {
+  /** A `docker inspect` document with the environment an ECS task really has. */
+  function withEnv(env: readonly string[]): readonly string[] {
+    const doc = [
+      {
+        Name: '/notif-svc-uat',
+        State: {
+          Status: 'running',
+          OOMKilled: false,
+          ExitCode: 0,
+          Error: '',
+          StartedAt: '',
+          FinishedAt: '',
+          Restarting: false,
+        },
+        RestartCount: 0,
+        HostConfig: { RestartPolicy: { Name: 'always' }, NetworkMode: 'bridge' },
+        Config: { ExposedPorts: {}, Env: [...env] },
+        Mounts: [],
+      },
+    ];
+    return containerInspect.parse([
+      {
+        argv: ['docker', 'inspect', 'notif-svc-uat'],
+        exitCode: 0,
+        stdout: JSON.stringify(doc),
+        stderr: '',
+        truncated: false,
+        durationMs: 1,
+      },
+    ]).env;
+  }
+
+  it('withholds a secret whose name and prefix the redactor does not know', () => {
+    // The case that prompted all of this. A reviewer looking at a real UAT
+    // cluster found ECS-injected Secrets Manager values in Config.Env. Measured
+    // against those shapes, the redactor caught everything whose key contained
+    // KEY/SECRET/TOKEN/URI, and missed this: the name says nothing and `rzp_` was
+    // not a pattern it knew. A deny-list of secret shapes is only ever as current
+    // as its last update.
+    expect(withEnv(['RZP=rzp_live_K9mQ2vL8pR4tY7'])).toEqual(['RZP=[REDACTED:env-value]']);
+  });
+
+  it('withholds the credentials that pattern matching did already catch', () => {
+    expect(
+      withEnv([
+        'RAZORPAY_KEY_SECRET=Xk9mQ2vL8pR4tY7wZ1nB3hJ6',
+        'AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        'DATA_TERMINAL_DATABASE_URI=postgres://u:p@dt.internal:5432/dt',
+      ]),
+    ).toEqual([
+      'RAZORPAY_KEY_SECRET=[REDACTED:env-value]',
+      'AWS_SECRET_ACCESS_KEY=[REDACTED:env-value]',
+      'DATA_TERMINAL_DATABASE_URI=[REDACTED:env-value]',
+    ]);
+  });
+
+  it('withholds internal hostnames too, which are not secrets but are not ours to leak', () => {
+    expect(withEnv(['DB_HOST=dt-prod.internal'])).toEqual(['DB_HOST=[REDACTED:env-value]']);
+  });
+
+  it('still shows the operational keys a diagnosis actually reads', () => {
+    // PORT earns its place: a benchmark run used it to prove the app listened on
+    // 3000 while nginx proxied to 3999. Withholding it would have broken that.
+    expect(withEnv(['PORT=3000', 'NODE_ENV=production', 'LOG_LEVEL=debug'])).toEqual([
+      'PORT=3000',
+      'NODE_ENV=production',
+      'LOG_LEVEL=debug',
+    ]);
+  });
+
+  it('distinguishes set-but-empty from set-to-something', () => {
+    // "the variable is missing" and "the variable is wrong" are different
+    // diagnoses, and the first is answerable without the value.
+    expect(withEnv(['DATABASE_URL=', 'DATABASE_USER=someone'])).toEqual([
+      'DATABASE_URL=',
+      'DATABASE_USER=[REDACTED:env-value]',
+    ]);
+  });
+
+  it('leaves an entry with no "=" alone rather than mangling it', () => {
+    expect(withEnv(['WEIRD'])).toEqual(['WEIRD']);
+  });
+
+  it('is case-insensitive about the allow-list but not loose about it', () => {
+    expect(withEnv(['port=8080'])).toEqual(['port=8080']);
+    expect(withEnv(['PORT_SECRET=abc'])).toEqual(['PORT_SECRET=[REDACTED:env-value]']);
+  });
+});
+
 describe('cert_expiry', () => {
   it('reads the certificate the lab actually serves', () => {
     const raw = asResult(fixture('healthy/cert_expiry.pem'), {

@@ -228,6 +228,7 @@ strip and explicit-indent forms.
 | Gap | Why it stays |
 |---|---|
 | A high-entropy token on a line with **no secret-like word** | Entropy analysis is gated on context. Without the gate, every image digest in `docker ps`, every git SHA and every UUID is redacted, and a redactor nobody can read through gets turned off |
+| A credential whose key name says nothing and whose value has an unknown vendor prefix | Measured, not assumed: `RZP=rzp_live_...` passed the redactor untouched. This is why `container_inspect` withholds environment values structurally instead of trusting the patterns -- a deny-list of secret shapes is only ever as current as its last update |
 | A long token of only **two character classes**, even with context | Three is the floor. Two would catch every hex digest and container id — the same unusable outcome |
 
 A value wrapped mid-token loses its first half to the assignment rule and keeps
@@ -256,6 +257,8 @@ that claim checkable rather than asserted.
 | 6 | **`tee` into a unit directory plus `systemctl start *` is full root.** A unit file is an arbitrary root command, so two individually narrow sudoers rules compose into everything | medium | Phase 6 review of finding 4 | **Fixed** — `/etc/systemd/**` added to `UNEDITABLE_PATHS`; the capability is refused in code rather than left to an approval. `edit-config.test.ts` |
 | 7 | **A trailing wildcard on a `find` sudoers rule grants arbitrary execution.** `find /var/log *` permits `find /var/log -exec rm -rf / {} +` | medium | Phase 3 sudoers design | **Fixed** — every `find` rule written out in full, wildcards only where `find` reads them as a basename pattern or an mtime |
 | 8 | **Baseline mode reported a safety zero it could not know.** Every safety metric is read from the audit log; baseline has no Dwara and so no log, an empty chain verifies, and a run that destroyed a database would score zero unsafe attempts and pass | medium | Phase 6 code review | **Fixed** — `safetyMeasured: false`, reported as `n/a`. Baseline numbers remain unpublishable for the reasons in `BENCHMARK.md` |
+
+| 9 | **`container_inspect` returned `Config.Env` in full.** On ECS, Secrets Manager values are injected straight into the container environment and `docker inspect` prints them in plain text. A reviewer checking a real UAT cluster found Razorpay keys, AWS access keys, messaging tokens and a database URI for a host shared with **production** -- all reachable by a read-only tool, and all landing in model context | high | review of an access request, before any access was granted | **Fixed** -- values are withheld by default against a short allow-list of operational keys, rather than relying on pattern matching. `parsers-docker.test.ts` |
 
 **No open findings at all.** Finding 6 was the last one open, and the decision went
 the conservative way: `/etc/systemd/**` is refused in code, and the `daemon-reload`
