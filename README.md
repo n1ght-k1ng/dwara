@@ -133,6 +133,7 @@ rather than in the models — see the findings register in `docs/THREAT_MODEL.md
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `docs/DESIGN.md`                    | architecture, the tool pipeline, and a dated decision log                                                                     |
 | `docs/THREAT_MODEL.md`              | assets, trust boundaries, five attacker models, findings register, and the limitations that are conceded rather than defended |
+| `docs/INSTALL.md`                   | what gets installed where, and the four ways to reach a host                                                                  |
 | `docs/FIRST_REAL_HOST.md`           | the order to do things the first time you point it at a machine that matters                                                  |
 | `docs/DEDICATED_KEY.md`             | the key and sudoers setup, and how to read an allow-list as a whole                                                           |
 | `BENCHMARK.md`                      | the scenarios, the methodology, and what a run costs                                                                          |
