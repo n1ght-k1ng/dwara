@@ -32,3 +32,8 @@ packages/plugin-claude-code/hook/
 # holding absolute paths from the machine it ran on, so the directory is local
 # scratch. Published results are committed deliberately, not by sweeping this up.
 evals/results/
+
+# Built into the single publishable package from the repo root; not sources.
+packages/dwara/plugin/
+packages/dwara/README.md
+packages/dwara/LICENSE

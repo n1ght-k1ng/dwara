@@ -12,6 +12,8 @@ export default tseslint.config(
       // The plugin bundles a built copy of the hook; the source is linted
       // where it lives, in packages/hook/src.
       'packages/plugin-claude-code/hook/**',
+      // And the published package copies the whole plugin in at build time.
+      'packages/dwara/plugin/**',
     ],
   },
   js.configs.recommended,
@@ -23,6 +25,13 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
       'no-console': ['warn', { allow: ['error', 'warn'] }],
     },
+  },
+  {
+    // Plain .mjs build scripts run under node with no TypeScript lib, so the
+    // globals have to be declared, and printing progress is their whole job.
+    files: ['**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
+    rules: { 'no-console': 'off' },
   },
   {
     // The CLI, the hook binary and the benchmark runner talk to the user over
