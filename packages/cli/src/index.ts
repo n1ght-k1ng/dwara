@@ -2,7 +2,7 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
-import { DwaraError } from '@dwara/core';
+import { DwaraError, packageVersion } from '@dwara/core';
 import { approve, listPending } from './approve.js';
 import { formatAudit, verifyAudit } from './audit.js';
 import { init } from './init.js';
@@ -12,8 +12,13 @@ import { formatReport, runDoctor } from './doctor.js';
 /** Package identifier, recorded in audit entries so each one names its build. */
 export const PACKAGE_NAME = '@dwara/cli' as const;
 
-/** Version of the Dwara toolchain this build belongs to. */
-export const VERSION = '0.0.0' as const;
+/**
+ * Version of the Dwara toolchain this build belongs to.
+ *
+ * Read from the nearest `package.json` rather than written here, so the
+ * published binaries cannot report a version the package does not have.
+ */
+export const VERSION: string = packageVersion(import.meta.url);
 
 export { runDoctor, formatReport } from './doctor.js';
 export {

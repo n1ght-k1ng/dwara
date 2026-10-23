@@ -1,4 +1,4 @@
-import { ToolRegistry } from '@dwara/core';
+import { ToolRegistry, packageVersion } from '@dwara/core';
 
 export { hostOverview } from './host-overview.js';
 export { serviceStatus } from './service-status.js';
@@ -93,5 +93,10 @@ export function createRegistry(): ToolRegistry {
 /** Package identifier, recorded in audit entries so each one names its build. */
 export const PACKAGE_NAME = '@dwara/tools' as const;
 
-/** Version of the Dwara toolchain this build belongs to. */
-export const VERSION = '0.0.0' as const;
+/**
+ * Version of the Dwara toolchain this build belongs to.
+ *
+ * Read from the nearest `package.json` rather than written here, so the
+ * published binaries cannot report a version the package does not have.
+ */
+export const VERSION: string = packageVersion(import.meta.url);

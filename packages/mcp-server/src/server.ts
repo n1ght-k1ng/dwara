@@ -13,6 +13,7 @@ import {
   loadPolicy,
   parseSshConfig,
   DEFAULT_APPROVAL_DIR,
+  packageVersion,
   FileApprovalStore,
   type RegisteredTool,
 } from '@dwara/core';
@@ -86,7 +87,7 @@ export async function buildServer(options: ServerOptions = {}): Promise<BuiltSer
   });
 
   const server = new McpServer(
-    { name: 'dwara', version: '0.0.0' },
+    { name: 'dwara', version: packageVersion(import.meta.url) },
     {
       instructions: [
         'Dwara gives you read-only access to managed Linux hosts through typed tools.',

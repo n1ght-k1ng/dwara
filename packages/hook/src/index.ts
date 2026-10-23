@@ -26,8 +26,16 @@ import { managedHosts } from './hosts.js';
  * credentials for managed hosts.
  */
 
+import { packageVersion } from '@dwara/core';
+
 export const PACKAGE_NAME = '@dwara/hook' as const;
-export const VERSION = '0.0.0' as const;
+/**
+ * Version of the Dwara toolchain this build belongs to.
+ *
+ * Read from the nearest `package.json` rather than written here, so the
+ * published binaries cannot report a version the package does not have.
+ */
+export const VERSION: string = packageVersion(import.meta.url);
 
 export { inspect } from './detect.js';
 export type { Verdict } from './detect.js';

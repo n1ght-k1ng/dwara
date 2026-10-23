@@ -1,3 +1,6 @@
+import { packageVersion } from './version.js';
+
+export { packageVersion } from './version.js';
 export { DwaraError } from './errors.js';
 export type { DwaraErrorCode, DwaraErrorDetails } from './errors.js';
 
@@ -23,8 +26,13 @@ export type {
 /** Package identifier, recorded in audit entries so each one names its build. */
 export const PACKAGE_NAME = '@dwara/core' as const;
 
-/** Version of the Dwara toolchain this build belongs to. */
-export const VERSION = '0.0.0' as const;
+/**
+ * Version of the Dwara toolchain this build belongs to.
+ *
+ * Read from the nearest `package.json` rather than written here, so the
+ * published binaries cannot report a version the package does not have.
+ */
+export const VERSION: string = packageVersion(import.meta.url);
 
 export { loadPolicy, parsePolicy, DEFAULT_POLICY_PATH } from './policy/load.js';
 export type { LoadedPolicy } from './policy/load.js';
