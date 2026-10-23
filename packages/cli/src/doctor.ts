@@ -193,6 +193,13 @@ async function checkCommand(
 ): Promise<Check> {
   const { command, probe, sudo } = required;
 
+  // Resolved before the sudo probe and kept in scope for the failure path: the
+  // sudoers line this prints is pasted verbatim into a file on that host, and a
+  // guessed prefix makes it wrong. `ss` is under /usr/sbin on Amazon Linux, so
+  // the hard-coded /usr/bin sent an operator away with a rule that could not
+  // match, and the round trip cost a second request to whoever owns the box.
+  let path = '';
+
   try {
     const present = await transport.run(host, { argv: ['command', '-v', command], timeoutMs });
     if (present.exitCode !== 0) {
@@ -204,7 +211,7 @@ async function checkCommand(
       };
     }
 
-    const path = present.stdout.trim();
+    path = present.stdout.trim();
     if (!sudo) return { name: command, status: 'ok', detail: `present (${path})` };
 
     // Presence is not enough: the tools run these under `sudo -n`, and a host
@@ -220,7 +227,7 @@ async function checkCommand(
         name: command,
         status: 'fail',
         detail: `sudo -n asks for a password for \`${probe.join(' ')}\``,
-        fix: sudoersLine(probe),
+        fix: sudoersLine(probe, path),
       };
     }
     return {
@@ -232,12 +239,24 @@ async function checkCommand(
   }
 }
 
-function sudoersLine(probe: readonly string[]): string {
+/**
+ * The exact line to add, with the path as the host itself resolved it.
+ *
+ * @param resolved absolute path from `command -v`, empty when it could not be
+ *   read — in which case this says so rather than inventing a prefix, because a
+ *   plausible-looking wrong path is worse than an admitted gap.
+ */
+export function sudoersLine(probe: readonly string[], resolved: string): string {
   const command = probe[0] ?? 'command';
+  const target = resolved === '' ? `$(command -v ${command})` : resolved;
+
   return [
     'Dwara only ever runs `sudo -n` and will not prompt for or store a password.',
-    'Add to /etc/sudoers.d/dwara (validate with visudo -c):',
-    `  <user> ALL=(root) NOPASSWD: /usr/bin/${command} ${probe.slice(1).join(' ')}`,
+    'Add to /etc/sudoers.d/dwara (chmod 440, validate with visudo -c):',
+    `  <user> ALL=(root) NOPASSWD: ${target} ${probe.slice(1).join(' ')}`,
+    resolved === ''
+      ? 'The path could not be resolved on the host — run that substitution there to fill it in.'
+      : `Path as ${command} resolves on this host; it differs by distribution.`,
     'Grant the verbs your policy actually permits rather than the bare command.',
   ].join('\n');
 }
