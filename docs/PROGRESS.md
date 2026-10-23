@@ -52,6 +52,25 @@ Noted, not changed: the risk prefix doubles a word in `read_read_config` and
 `config_edit_config`. Renaming a tool breaks every policy file that names it, so it waits
 for a deliberate breaking release.
 
+**Task 3 — CI read for the first time (2026-10-23).** `ci`.
+
+`gh` is installed and authenticated, and the Actions tab that had gone unread since
+Phase 0 says: **green, and green for the last five runs.** All three jobs pass, shellcheck
+included. The failures were real but historical — Sept 24 to Oct 6, each fixed as it
+happened, the last of them by `fix(ci): build the hook before the plugin that copies it`.
+"CI has never been confirmed green" is closed; it had been carried forward through five
+phases on no evidence either way.
+
+What the tab was hiding: every action was several majors behind — `checkout` and
+`setup-node` on v4 against v7, `pnpm/action-setup` on v4 against v6 — so the runners were
+forcing them onto Node 24 and warning about it. Harmless until the runners drop Node 20
+entirely, at which point it breaks, and for the publish workflow that means breaking at
+release time, which is the worst moment available. Bumped in both workflows.
+
+Also noted, not acted on: `ubuntu-latest` began migrating to Ubuntu 26 on 2026-10-19.
+Pinning the publish job to a fixed runner is defensible and would need deliberate
+maintenance; left on `ubuntu-latest` for now.
+
 **Task 2 — the three things between here and a publish (2026-10-23).** `fix(cli)`, `ci(release)`.
 
 **`doctor` printed a sudoers path it had already resolved and thrown away.** It runs
