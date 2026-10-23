@@ -1304,3 +1304,54 @@ the repo; Phase 5 replaces it with the real benchmark runner under `evals/`.
   ports. The gate suggests orientation tools earn their place by pointing somewhere.
 
 ## Dogfooding log (Phase 7)
+
+**Run 1 — the first real host, read-only (2026-10-23).** `fix(cli)`.
+
+The first machine Dwara has ever touched that is not a Docker container. It was
+**company UAT infrastructure** (`alon-uat`, an Ubuntu 24.04 EC2 instance in the
+TryThat.AI account), reached over SSH on a public IP. This **inverts the order in
+PLAN.md**, which starts Phase 7 on a personal VPS; recorded here rather than
+smoothed over. The intended production target (`alon-be-prod-instance`) was not
+reachable — no public IP and not SSM-managed — so the infrastructure, not a
+choice, settled which host.
+
+**It was a trial posture, not the recommended setup.** The run used the operator's
+own `~/.ssh/id_ed25519` and the `ubuntu` login, so the dedicated-key separation
+that `DEDICATED_KEY.md` argues for did **not** hold. Zero server-side changes were
+made, which is the whole point of starting read-only: the policy
+(`~/.dwara/policy-alon-readonly.yaml`) is `allow: [read]` and denies `reversible`,
+`config` and `destructive` outright, so there was nothing to install and nothing
+to approve.
+
+What the run proved, end to end on real infrastructure:
+
+- `dwara doctor` — reachable, and `sudo -n` genuinely works for `systemctl` and
+  `journalctl`. The path-resolution fix from Task 2 paid off immediately: the
+  paths it reported were the ones the host uses.
+- `read_host_overview` through the MCP server — real data, wrapped in the
+  untrusted-output envelope, policy decision `allow` with the rule cited. Ubuntu
+  24.04.4, 84 days uptime, systemd healthy, root disk 48%.
+- `reversible_restart_service` on the same host — **denied by policy in 7 ms**,
+  before any SSH connection opened (the read took 244 ms). The safety layer
+  engaged on a real company machine exactly as on the lab.
+- The audit chain over the two calls verified intact.
+
+**And the run found a bug, which is what Phase 7 is for.** `dwara audit verify -f
+<path>` ignored the path and always verified `.dwara/audit.jsonl` — so an
+integrity check could silently confirm a *different* log than the one asked about,
+and report it intact. Cause: the `verify` subcommand declared its own `-f` while
+the parent `audit` command already had one, and Commander binds a `-f` typed after
+the subcommand to the **parent**, leaving the child option on its default.
+Reproduced minimally, fixed by dropping the duplicate and reading the inherited
+option via `optsWithGlobals()`, and covered by three CLI-level tests in
+`index.test.ts` — the function-level tests could never have caught it because the
+bug was in the wiring. For a tool whose entire value is a log you can believe,
+"verify the wrong file and say it's fine" is the right class of bug to find first.
+
+**Friction worth recording:** the setup needed a hand-probe to discover which key
+and user reached the host, because the host was not in `~/.ssh/config`. A real
+operator would already have that entry and `dwara init` would read it — but the
+first-run experience for a brand-new host is rougher than the docs imply, and
+that is a `dwara provision` / discovery gap already noted in the product plan.
+
+

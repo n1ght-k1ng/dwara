@@ -208,9 +208,15 @@ export function buildProgram(): Command {
   audit
     .command('verify')
     .description('check the hash chain end to end')
-    .option('-f, --file <path>', 'audit log to check', '.dwara/audit.jsonl')
-    .action(async (options: { file: string }) => {
-      const report = await verifyAudit(options.file);
+    // Deliberately no own `-f`: the parent `audit` already declares one, and
+    // Commander binds a `-f` typed *after* the subcommand to the PARENT, leaving
+    // a duplicate child option on its default. The effect was that
+    // `dwara audit verify -f other.jsonl` silently verified `.dwara/audit.jsonl`
+    // and reported it intact -- an integrity check that ignored the file it was
+    // asked about. The file is inherited from the parent via optsWithGlobals.
+    .action(async (_options: unknown, command: Command) => {
+      const { file } = command.optsWithGlobals() as { file: string };
+      const report = await verifyAudit(file);
       console.log(report.text);
       // Non-zero so this is usable in CI and in the eval harness.
       process.exitCode = report.ok ? 0 : 1;
