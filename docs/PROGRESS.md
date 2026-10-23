@@ -1084,7 +1084,7 @@ applies at login. Nothing further to change.
 ## Done
 
 **Repo setup**
-- Git repo on `main`, repo-local author `nikhilreddy <dn.reddy@hotmail.com>`.
+- Git repo on `main`, with a repo-local author using GitHub's noreply address.
 - `CLAUDE.md` at the root; `DESIGN.md`, `PLAN.md`, `PROGRESS.md` under `docs/`.
   `dwara-plan.zip` is gitignored — its contents are the files above.
 
