@@ -1,0 +1,107 @@
+name: Publish
+
+# Publishing is gated on a human cutting a GitHub Release, not on a push. The
+# tag is the decision; everything below is mechanics.
+#
+# It runs from CI rather than a laptop because `publishConfig.provenance` is
+# true: npm will only attest a build it can trace to a workflow run, and that
+# attestation is worth more for a tool that holds SSH keys than for most
+# packages. `id-token: write` is what makes it possible.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Pack and verify without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: verify · pack · publish
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # The same gate CI runs. A release is the worst moment to discover that
+      # main was red.
+      - name: Verify
+        run: pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build
+
+      # A release tagged v0.2.0 that publishes 0.1.0 is a silent, unfixable
+      # mistake: npm will not let the version be reused, so the tag and the
+      # registry disagree forever.
+      - name: Tag matches the package version
+        if: github.event_name == 'release'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./packages/dwara/package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "release tag $GITHUB_REF_NAME does not match dwara@$pkg" >&2
+            exit 1
+          fi
+          echo "publishing dwara@$pkg"
+
+      # Proves the tarball is installable before it is published, not after.
+      # The pack test is what caught every binary reporting 0.0.0.
+      - name: Install the tarball and run the binaries
+        working-directory: packages/dwara
+        run: |
+          set -euo pipefail
+          expected="$(node -p "require('$GITHUB_WORKSPACE/packages/dwara/package.json').version")"
+          tarball="$PWD/$(npm pack --silent | tail -1)"
+          work="$(mktemp -d)"
+          cd "$work"
+          npm init -y >/dev/null
+          npm install "$tarball" >/dev/null
+
+          version="$(./node_modules/.bin/dwara --version)"
+          if [ "$version" != "$expected" ]; then
+            echo "installed dwara reports $version, package says $expected" >&2
+            exit 1
+          fi
+
+          # Fails closed with a message naming the fix, rather than starting
+          # without a policy. Captured rather than piped: the server exits
+          # non-zero when it refuses, which is correct, and `pipefail` would
+          # read that correct refusal as a failed check.
+          refusal="$(./node_modules/.bin/dwara-mcp </dev/null 2>&1 || true)"
+          case "$refusal" in
+            *'no policy file'*) ;;
+            *)
+              echo "dwara-mcp did not refuse to start without a policy" >&2
+              echo "$refusal" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "tarball ok: dwara@$version"
+
+      - name: Publish
+        if: github.event_name == 'release' || inputs.dry_run == false
+        working-directory: packages/dwara
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run only
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: echo 'Verified and packed. Nothing published — re-run with dry_run off, or cut a release.'

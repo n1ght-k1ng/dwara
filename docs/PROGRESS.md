@@ -52,6 +52,34 @@ Noted, not changed: the risk prefix doubles a word in `read_read_config` and
 `config_edit_config`. Renaming a tool breaks every policy file that names it, so it waits
 for a deliberate breaking release.
 
+**Task 2 — the three things between here and a publish (2026-10-23).** `fix(cli)`, `ci(release)`.
+
+**`doctor` printed a sudoers path it had already resolved and thrown away.** It runs
+`command -v` and knows exactly where `ss` lives, then hard-coded `/usr/bin/` into the
+line it hands an operator. On Amazon Linux `ss` is under `/usr/sbin`, so the rule pasted
+into the ticket could never match, `visudo -c` accepted it happily, and the cost was a
+second request to whoever administers the host. Now it prints the resolved path, and
+says so when it could not resolve one rather than inventing a prefix.
+`packages/cli/src/doctor.test.ts` pins it, including the Amazon Linux case.
+
+**A publish workflow, because provenance cannot come from a laptop.**
+`publishConfig.provenance` is true, and npm only attests a build it can trace to a
+workflow run — so `npm publish` locally fails by design. `.github/workflows/publish.yml`
+is gated on a human cutting a GitHub Release, re-runs the full CI gate, refuses when the
+release tag and the package version disagree, and **installs the tarball and runs the
+binaries before publishing rather than after**. That last step is the one that caught
+every binary reporting `0.0.0`. Needs a repository environment named `npm` holding
+`NPM_TOKEN`.
+
+The pack step was extracted and run locally rather than trusted: it passes, and the
+`dwara-mcp` refusal check is captured rather than piped, because the server correctly
+exits non-zero when it refuses and `pipefail` would read that as the check failing.
+
+**`.github/secret_scanning.yml`.** The redactor corpus is deliberately full of
+secret-shaped strings — AWS's own published example key, synthetic tokens, bare PEM
+headers. Without the ignore, push protection fires on all of them the moment the repo is
+public and a real leak would be lost in the noise.
+
 ### Phase 6 log
 
 **Task 1 — the threat model (2026-10-06).** `docs(security)`.
