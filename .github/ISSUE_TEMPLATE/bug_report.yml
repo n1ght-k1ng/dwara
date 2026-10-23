@@ -1,0 +1,70 @@
+name: Bug report
+description: Something behaves differently from what it says it does.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Not for security issues.** A policy bypass, a redaction leak, an
+        approval that should not have been granted, or a mutation without a
+        snapshot goes through private reporting instead — see
+        [SECURITY.md](../blob/main/SECURITY.md).
+
+        **Never paste real hostnames, addresses, keys or configuration.** Use
+        testbed names. If output has to be included, read it first: Dwara
+        redacts, and redaction is not a guarantee.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: >
+        The smallest sequence that shows it. A failing test, or a benchmark
+        scenario under `evals/scenarios/`, is the most useful form this can
+        take — it turns a report into something that stays fixed.
+      placeholder: |
+        1. policy.yaml contains ...
+        2. the agent calls ...
+        3. the tool returns ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: policy
+    attributes:
+      label: The relevant part of your policy
+      description: Only the rules that matter, with host patterns renamed.
+      render: yaml
+
+  - type: input
+    id: version
+    attributes:
+      label: Dwara version
+      description: '`dwara --version`, or the commit you are on.'
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Node version and OS
+      placeholder: node 22.11.0, Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: '`dwara doctor` runs, and I have included anything it complained about'
+        - label: There are no real hostnames, addresses, keys or configuration in this report
+          required: true

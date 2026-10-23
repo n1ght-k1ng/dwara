@@ -4,9 +4,53 @@ Handoff notes between Claude Code sessions. Update after every task.
 
 ## Current phase
 
-Phase 6 — security hardening and threat model. **In progress.** Phase 5's harness and
-scenarios are done; its second exit criterion (two-model results) is deliberately not
-met and is blocked on design as well as budget — see the Phase 5 log.
+Phase 8 — publish. **Mechanics done, substance outstanding.** Phase 6 is complete.
+Phase 7 (dogfooding) has not started: the log below is still empty, and nothing has
+run against a machine that is not a Docker container.
+
+### Phase 8 log
+
+**Task 1 — the publication mechanics (2026-10-13).** `chore(release)`.
+
+Four things, one sitting.
+
+**Company identifiers out of the tree and out of history.** `packages/cli/src/ssm.test.ts`
+and `docs/INSTALL.md` carried two real EC2 instance ids and the employer's host aliases,
+introduced by the two commits at the tip. Not credentials — an instance id is useless
+without access to that account — but it is company configuration, which this repo's own
+rules forbid, and the repo is still private so removing it cost nothing. Both commits
+were replayed with the identifiers replaced by obvious fakes (`app-a`, `i-0123456789abcdef0`);
+`backup-pre-scrub` holds the originals until the force-push lands. `docs/PLAN.md` no
+longer names the employer either, though that one is old enough to still be in history.
+
+**`dwara` is publishable.** `private` removed, version `0.1.0`, with `repository`,
+`homepage`, `bugs`, `keywords` and `author` so the npm page is not blank. The other
+packages stay private on purpose: they are bundled into this one by `noExternal`, not
+published beside it. `packages/dwara/dwara-0.0.0.tgz` had been committed by accident;
+untracked, and `*.tgz` is now ignored.
+
+**Community files.** `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, saying plainly that
+a one-maintainer project has nowhere for a report about the maintainer to go),
+issue forms for bugs and features, `.github/ISSUE_TEMPLATE/config.yml` routing security
+reports to private advisories and turning off blank issues, a PR template that asks for
+the CLA line and the tool-safety checklist, and `CHANGELOG.md` for 0.1.0 with the
+limitations stated rather than discovered.
+
+**The pack test found a real bug, which is what it is for.** The tarball installs clean
+(267 kB, 22 files, 116 deps, no advisories) and all three binaries run — but
+`dwara --version` answered `0.0.0` while the package said `0.1.0`. Every package carried
+a hard-coded `VERSION = '0.0.0'`, and the bug report template asks for exactly that
+number. `packageVersion()` in `packages/core/src/version.ts` now reads the nearest
+`package.json`: in the published bundle that is `dwara`'s own, so the binaries report the
+released version; in a workspace build it is that package's, which honestly reports an
+unpublished `0.0.0`. The MCP server's `serverInfo` used the same literal and now uses the
+same helper. Verified from the installed tarball: `dwara --version` → `0.1.0`,
+`serverInfo.version` → `0.1.0`, 17 tools served, and a missing policy still fails closed
+with the message that names the fix.
+
+Noted, not changed: the risk prefix doubles a word in `read_read_config` and
+`config_edit_config`. Renaming a tool breaks every policy file that names it, so it waits
+for a deliberate breaking release.
 
 ### Phase 6 log
 

@@ -1,0 +1,52 @@
+name: Feature request
+description: A tool, a policy capability, or a change to how something works.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two things are settled and a request for either will be declined, so it
+        is worth saying up front: **there will be no arbitrary shell tool**, and
+        **the destructive risk class stays denied**. Both are in
+        [CLAUDE.md](../blob/main/CLAUDE.md), and the reasoning is in
+        [docs/DESIGN.md](../blob/main/docs/DESIGN.md).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you were trying to do
+      description: >
+        The operational task, not the feature. "I needed to find which process
+        held a port" is more useful than "add an lsof tool", because the second
+        one presumes the answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: Including whether you drop out of Dwara and use a plain shell.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk
+    attributes:
+      label: If this is a new tool, what risk class is it?
+      options:
+        - read — returns information, changes nothing
+        - reversible — changes something that can be put back
+        - config — edits configuration
+        - not a tool
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety
+    attributes:
+      label: For anything that mutates — snapshot, verify, rollback
+      description: >
+        What gets captured before, what proves the change worked, and how it is
+        undone when it did not. A mutating tool without all three cannot be
+        merged, so sketching them early saves the work.

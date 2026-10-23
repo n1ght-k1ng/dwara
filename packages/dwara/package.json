@@ -1,9 +1,29 @@
 {
   "name": "dwara",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Policy-controlled SSH access for AI coding agents",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ssh",
+    "ai-agent",
+    "claude-code",
+    "sre",
+    "devops",
+    "policy",
+    "audit-log"
+  ],
   "license": "AGPL-3.0-or-later",
+  "author": "Nikhil Reddy",
+  "homepage": "https://github.com/n1ght-k1ng/dwara#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/n1ght-k1ng/dwara.git",
+    "directory": "packages/dwara"
+  },
+  "bugs": {
+    "url": "https://github.com/n1ght-k1ng/dwara/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"

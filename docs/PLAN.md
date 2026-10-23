@@ -318,7 +318,7 @@ anything that succeeds. Draft docs/THREAT_MODEL.md.
 Order of environments:
 1. **Your own VPS** (personal account, personal key): read-only for 3–4 days, then reversible tools.
 2. **Other personal or friends' servers** with their consent.
-3. **Company infrastructure (e.g. TryThat.AI):** only with explicit written approval from the company, starting with
+3. **Company infrastructure:** only with explicit written approval from the company, starting with
    staging, read-only, using a dedicated key and a policy that denies all mutations. Nothing from company systems
    (hostnames, configs, logs, screenshots) goes into the repo, benchmark, docs, or demo.
 

@@ -37,3 +37,6 @@ evals/results/
 packages/dwara/plugin/
 packages/dwara/README.md
 packages/dwara/LICENSE
+
+# npm pack output
+*.tgz

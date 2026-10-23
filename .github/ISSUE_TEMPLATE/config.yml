@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/n1ght-k1ng/dwara/security/advisories/new
+    about: Policy bypass, redaction leak, approval forgery, or a mutation without a snapshot. Private, never a public issue.
+  - name: Question or an idea that is not a request yet
+    url: https://github.com/n1ght-k1ng/dwara/discussions
+    about: Including "would Dwara be the wrong tool for this?", which is a fair question and gets an honest answer.
