@@ -43,6 +43,40 @@ Three binaries, one package:
 | `dwara-mcp` | the MCP server your client launches |
 | `dwara-hook` | the PreToolUse hook that blocks raw `ssh` |
 
+## Prerequisites
+
+What you need depends on what you are trying to do, so the list is split three
+ways rather than given as one wall. **`dwara doctor` checks everything on the
+server side for you and prints the exact fix for anything missing** — so this
+section covers only what has to be in place *before* you can connect at all, which
+is the part no command can check for you.
+
+**Just to try the lab:**
+
+- **Node 20+**
+- **pnpm** — every command below is `pnpm …`; install with `npm install -g pnpm` or
+  `corepack enable`
+- **Docker** (with Compose) — the lab is five containers, about 6 GB of images
+- while Dwara is clone-only (nothing on npm yet), also **git**
+
+**To point it at a real server**, instead of Docker:
+
+- **Node 20+**, **pnpm**, **git** as above
+- the system **`ssh`** binary — Dwara calls it rather than reimplementing SSH,
+  which is why your existing SSH config, agents and bastions all keep working
+
+**To let it find your AWS machines** (`dwara discover`, or any SSM-reached host):
+
+- the **AWS CLI v2**
+- the **Session Manager plugin** (only for SSM-reached hosts)
+- a working AWS login — a profile in `~/.aws`, an `aws sso login`, or an instance
+  role. The rule is simply: **if `aws ec2 describe-instances` works in your
+  terminal, Dwara's AWS features work.** You never hand Dwara an AWS key; it uses
+  the access your `aws` command already has, and read-only access is enough.
+
+> Once the npm package ships, pnpm and git drop off this list and installing is
+> just Node plus the `ssh` binary. Until then it is from a clone.
+
 ## Step 1: install it on your machine
 
 Nothing is published to npm yet, so from a clone:
@@ -53,10 +87,6 @@ pnpm install
 pnpm build
 pnpm dwara --version
 ```
-
-Needs **Node 20+** and the system `ssh` binary. Dwara calls `ssh` rather than
-reimplementing it, which is why your existing SSH config, agents and bastions all
-keep working.
 
 ## Step 2: a key that only Dwara uses
 
