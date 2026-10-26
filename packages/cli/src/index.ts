@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { DwaraError, packageVersion } from '@dwara/core';
@@ -8,6 +10,7 @@ import { formatAudit, verifyAudit } from './audit.js';
 import { init } from './init.js';
 import { listHostSnapshots, rollback } from './rollback.js';
 import { formatReport, runDoctor } from './doctor.js';
+import { discover } from './discover.js';
 
 /** Package identifier, recorded in audit entries so each one names its build. */
 export const PACKAGE_NAME = '@dwara/cli' as const;
@@ -222,7 +225,43 @@ export function buildProgram(): Command {
       process.exitCode = report.ok ? 0 : 1;
     });
 
+  program
+    .command('discover')
+    .description('find your AWS machines and write the SSH config to reach them')
+    .option('--profile <name>', 'AWS profile to use (else AWS_PROFILE or the default)')
+    .option('--region <name>', 'AWS region (else AWS_REGION or the profile default)')
+    .option('-F, --ssh-config <path>', 'where to write the config', '~/.dwara/ssh_config')
+    .option('--key <path>', 'use this private key for every host, skipping the key-pair lookup')
+    .option('--dry-run', 'print the block instead of writing it')
+    .option('--include-stopped', 'also list stopped instances')
+    .action(
+      async (options: {
+        profile?: string;
+        region?: string;
+        sshConfig: string;
+        key?: string;
+        dryRun?: boolean;
+        includeStopped?: boolean;
+      }) => {
+        const report = await discover({
+          sshConfigPath: expandHome(options.sshConfig),
+          ...(options.profile === undefined ? {} : { profile: options.profile }),
+          ...(options.region === undefined ? {} : { region: options.region }),
+          ...(options.key === undefined ? {} : { keyOverride: expandHome(options.key) }),
+          ...(options.dryRun === true ? { dryRun: true } : {}),
+          ...(options.includeStopped === true ? { includeStopped: true } : {}),
+        });
+        if (options.dryRun === true) console.log(report.block);
+        console.log(report.text);
+      },
+    );
+
   return program;
+}
+
+/** Expands a leading `~/` so a config path is usable from any cwd. */
+function expandHome(path: string): string {
+  return path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
 }
 
 /** Entry point. Typed errors are reported as messages, never as stack traces. */

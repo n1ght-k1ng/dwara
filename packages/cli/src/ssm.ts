@@ -45,7 +45,7 @@ export function ssmTarget(resolved: Pick<ResolvedHost, 'hostname' | 'proxyComman
 }
 
 /** Runs a local command, reporting failure rather than throwing. */
-async function tryRun(
+export async function tryRun(
   argv: readonly string[],
   timeoutMs: number,
 ): Promise<{ ok: boolean; out: string }> {
@@ -217,12 +217,48 @@ export const BLOCK_END = '# <<< dwara ssm hosts (generated) <<<';
  * identifies the role and not the box. The id is written as a comment beside each
  * entry so an operator can tell which machine an entry meant at the time.
  */
-export function ssmSshConfig(hosts: readonly SsmHost[], options: SsmConfigOptions = {}): string {
-  const env = [
+/** The `AWS_PROFILE=… AWS_REGION=… ` prefix for a generated ProxyCommand. */
+export function ssmProxyEnv(options: Pick<SsmConfigOptions, 'profile' | 'region'>): string {
+  return [
     options.profile === undefined ? '' : `AWS_PROFILE=${options.profile} `,
     options.region === undefined ? '' : `AWS_REGION=${options.region} `,
   ].join('');
+}
 
+/**
+ * One host's SSM stanza, the leading blank line included.
+ *
+ * Extracted so `dwara discover`, which emits a mixed block of direct and SSM
+ * hosts under the same markers, shares exactly this formatting — the
+ * `ProxyCommand` line in particular has one source of truth.
+ */
+export function ssmStanzaLines(host: SsmHost, options: SsmConfigOptions = {}): string[] {
+  const env = ssmProxyEnv(options);
+  return [
+    '',
+    `Host ${host.alias}`,
+    `  # instance at time of writing: ${host.instanceId}`,
+    `  HostName ${host.instanceId}`,
+    `  User ${host.user}`,
+    ...(options.identityFile === undefined ? [] : [`  IdentityFile ${options.identityFile}`]),
+    '  IdentitiesOnly yes',
+    '  BatchMode yes',
+    '  PasswordAuthentication no',
+    '  StrictHostKeyChecking accept-new',
+    ...(options.knownHostsFile === undefined
+      ? []
+      : [`  UserKnownHostsFile ${options.knownHostsFile}`]),
+    '  ConnectTimeout 10',
+    // ControlMaster is what makes this usable rather than merely possible: one
+    // SSM session is reused for every command instead of a fresh handshake per
+    // call, which costs a second or two each.
+    '  ControlMaster auto',
+    '  ControlPersist 300',
+    `  ProxyCommand sh -c "${env}aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"`,
+  ];
+}
+
+export function ssmSshConfig(hosts: readonly SsmHost[], options: SsmConfigOptions = {}): string {
   const lines: string[] = [
     BLOCK_START,
     '#',
@@ -239,28 +275,7 @@ export function ssmSshConfig(hosts: readonly SsmHost[], options: SsmConfigOption
   ];
 
   for (const host of hosts) {
-    lines.push(
-      '',
-      `Host ${host.alias}`,
-      `  # instance at time of writing: ${host.instanceId}`,
-      `  HostName ${host.instanceId}`,
-      `  User ${host.user}`,
-      ...(options.identityFile === undefined ? [] : [`  IdentityFile ${options.identityFile}`]),
-      '  IdentitiesOnly yes',
-      '  BatchMode yes',
-      '  PasswordAuthentication no',
-      '  StrictHostKeyChecking accept-new',
-      ...(options.knownHostsFile === undefined
-        ? []
-        : [`  UserKnownHostsFile ${options.knownHostsFile}`]),
-      '  ConnectTimeout 10',
-      // ControlMaster is what makes this usable rather than merely possible: one
-      // SSM session is reused for every command instead of a fresh handshake per
-      // call, which costs a second or two each.
-      '  ControlMaster auto',
-      '  ControlPersist 300',
-      `  ProxyCommand sh -c "${env}aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"`,
-    );
+    lines.push(...ssmStanzaLines(host, options));
   }
 
   lines.push('', BLOCK_END, '');

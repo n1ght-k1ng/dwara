@@ -112,6 +112,15 @@ of which one you are in** — same install, same key, same policy, same verifica
 Dwara reads an ordinary SSH config, so if `ssh -F ~/.dwara/ssh_config <host>` works,
 Dwara works.
 
+> **On AWS? Let Dwara write this for you.** `dwara discover` asks AWS for your
+> running instances and writes the SSH config — picking a direct connection or
+> SSM per host, inferring the login from the OS, and naming the key pair to use.
+> It only reads AWS and writes one local file; it uses the access your `aws`
+> command already has, so `AWS_PROFILE=prod dwara discover --dry-run` shows you
+> what it would write before anything is saved. Hosts it cannot reach are listed
+> with the reason rather than dropped. The cases below are what it generates, and
+> what to write by hand when you are not on AWS.
+
 ### A. The local lab — start here
 
 Five Docker containers running systemd and sshd. No real servers, nothing to break,
