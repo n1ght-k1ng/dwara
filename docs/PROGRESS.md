@@ -1338,6 +1338,24 @@ the repo; Phase 5 replaces it with the real benchmark runner under `evals/`.
 
 ## Dogfooding log (Phase 7)
 
+**Run 2 — read-only investigation through the MCP pipeline (2026-10-26).**
+
+Same company UAT host, driven as a real session rather than a one-off: four tool calls
+through the MCP server against the live box, logged to a hash-chained audit file.
+
+- `read_host_overview` -> allowed: Ubuntu 24.04, 87 days uptime, load ~0, root disk 48%,
+  systemd running, zero failed units.
+- `read_disk_usage /var/log` -> allowed.
+- `read_open_ports` -> allowed, ten listening ports.
+- `reversible_restart_service` -> **denied by policy in 46 ms**, before any SSH connection,
+  because the read-only policy denies the reversible class outright.
+- `dwara audit verify` -> four entries, chain intact.
+
+The point of the run: the safety layer behaves identically on real infrastructure as in
+the lab — reads flow, a mutation is refused in code before it can touch the host, and the
+audit log is tamper-evident over the whole session. No company data recorded here; the
+figures above are generic host health.
+
 **Run 1 — the first real host, read-only (2026-10-23).** `fix(cli)`.
 
 The first machine Dwara has ever touched that is not a Docker container. It was
