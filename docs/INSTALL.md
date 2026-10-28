@@ -79,10 +79,17 @@ is the part no command can check for you.
 
 ## Step 1: install it on your machine
 
-Nothing is published to npm yet, so from a clone:
+From npm:
 
 ```bash
-git clone <repo> && cd dwara
+npm install -g dwara
+dwara --version
+```
+
+Or from a clone, to work on it:
+
+```bash
+git clone https://github.com/n1ght-k1ng/dwara.git && cd dwara
 pnpm install
 pnpm build
 pnpm dwara --version

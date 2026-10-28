@@ -19,12 +19,12 @@ difficult** rather than merely discouraged.
 
 ![Redis is down on a production host: the AI agent diagnoses it, the restart is held for human approval, then applied with a snapshot and verified — the whole incident in a tamper-evident log](docs/assets/dwara-demo.gif)
 
-> [!WARNING]
-> **Pre-1.0, nothing published to npm yet.** Phases 0–6 of `docs/PLAN.md` are
-> complete — tools, policy engine, approvals, hook, benchmark, security work. It
-> runs against a Dockerised lab today. It has **not** been run against real
-> infrastructure, and the benchmark's headline comparison is built but not paid
-> for. Both are deliberate and both are tracked in `docs/PROGRESS.md`.
+> [!NOTE]
+> **Pre-1.0.** Published to npm (`npm install -g dwara`) and exercised **read-only
+> against real infrastructure**; mutating actions have so far been tested only
+> against the Dockerised lab. The benchmark harness and all 21 scenarios are
+> complete, but the headline numbers have not been run yet. Status is tracked
+> honestly in `docs/PROGRESS.md`.
 
 ---
 
