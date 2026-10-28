@@ -17,7 +17,7 @@ instruction it read in a log file.
 Dwara sits between the agent and the hosts and makes that **structurally
 difficult** rather than merely discouraged.
 
-![Dwara refusing a production restart in 7ms, before any connection, and verifying its audit chain](docs/assets/dwara-demo.gif)
+![Redis is down on a production host: the AI agent diagnoses it, the restart is held for human approval, then applied with a snapshot and verified — the whole incident in a tamper-evident log](docs/assets/dwara-demo.gif)
 
 > [!WARNING]
 > **Pre-1.0, nothing published to npm yet.** Phases 0–6 of `docs/PLAN.md` are
