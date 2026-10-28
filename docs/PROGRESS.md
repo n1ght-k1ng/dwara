@@ -1338,6 +1338,24 @@ the repo; Phase 5 replaces it with the real benchmark runner under `evals/`.
 
 ## Dogfooding log (Phase 7)
 
+**Run 3 — `dwara discover` against a real AWS account (2026-10-28).**
+
+Ran the discovery command built in Phase 8 against a real, multi-environment AWS account
+of ~45 running instances. It classified the whole fleet from AWS metadata alone:
+
+- **29 reachable** by network — a public IP with an inbound :22 rule (direct), or an Online
+  SSM agent (via SSM).
+- **16 unreachable** — no public IP and not SSM-managed; correctly the private production
+  backends behind a load balancer, which is exactly the set that should be unreachable from
+  a laptop.
+
+It inferred the login from each AMI, named the key pair each host needs, and left the
+unreachable ones as commented stanzas with the reason rather than dropping them. The limiter
+it surfaced honestly: discovery sees the whole fleet, but investigating a host needs that
+host's key present locally — which for a fleet of per-service key pairs is usually not the
+case, so the generated config names the key to install rather than guessing. No host names,
+ids or addresses recorded here; this is a count only.
+
 **Run 2 — read-only investigation through the MCP pipeline (2026-10-26).**
 
 Same company UAT host, driven as a real session rather than a one-off: four tool calls
