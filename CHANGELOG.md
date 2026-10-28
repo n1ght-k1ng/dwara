@@ -2,15 +2,6 @@
 
 Notable changes to the published `dwara` package. Dates are the release date.
 
-## 0.1.1 — 2026-10-26
-
-Same code as `0.1.0`, re-released through the CI pipeline so the published
-tarball carries a **provenance attestation** — a signed, public record tying the
-npm package to the exact GitHub commit and workflow run that built it. For a tool
-that touches production servers, "the package is provably the audited source" is
-worth having. `0.1.0` was published from a local machine, which cannot generate
-provenance; every release from here does.
-
 ## 0.1.0 — 2026-10-26
 
 First public release. Everything below has been exercised against the Docker
